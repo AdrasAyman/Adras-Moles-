@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MOLEFIELD — Full-Body Whack-a-Mole</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Header HUD -->
+    <header>
+      <div class="hcell">
+        <div id="brand">MOLEFIELD<small>ULTRASONIC BODY TRACKER</small></div>
+      </div>
+      <div class="hcell">
+        <div class="k">Score</div>
+        <div class="v" id="uiScore">0</div>
+      </div>
+      <div class="hcell">
+        <div class="k">Level</div>
+        <div class="v" id="uiLevel">1</div>
+      </div>
+      <div class="hcell">
+        <div class="k">Streak</div>
+        <div class="v" id="uiStreak">×1</div>
+      </div>
+      <div class="hcell">
+        <div class="k">Missed</div>
+        <div class="v" id="uiMiss">0</div>
+      </div>
+      <div class="hcell wide">
+        <div class="k" id="uiPhaseK">Time left</div>
+        <div class="v" id="uiTime">45.0</div>
+      </div>
+    </header>
+    <div id="timebar"><div id="timefill" style="width:100%"></div></div>
+
+    <!-- Main Workspace -->
+    <main>
+      <div id="stagewrap">
+        <canvas id="stage"></canvas>
+        <div id="dz"><div id="dzmsg">STEP BACK</div></div>
+
+        <!-- Overlays -->
+        <div class="overlay" id="ovStart">
+          <h1>Whack a mole with your whole body</h1>
+          <p>
+            Moles pop up across the field. Move your body — or your mouse, for now — so the cursor sits on a mole and <b>hold it there</b> until the ring fills. Get too close to the screen and the dead-zone alarm fires.
+          </p>
+          <div class="keys">
+            <div><b>MOVE</b>steer the cursor</div>
+            <div><b>HOLD</b>whack the mole</div>
+            <div><b>P</b>pause</div>
+            <div><b>M</b>mute</div>
+          </div>
+          <button class="cta" id="btnStart">Start round</button>
+          <p style="font-size:0.7rem">Sound is on. Everything runs offline in zero dependencies.</p>
+        </div>
+
+        <div class="overlay" id="ovLevel" hidden>
+          <div class="k" style="font:600 0.6rem/1 var(--mono);letter-spacing:0.2em;color:var(--text-dim)">LEVEL CLEARED</div>
+          <div class="big" id="lvBig">2</div>
+          <h1 id="lvName">Faster moles</h1>
+          <p id="lvDesc"></p>
+          <button class="cta" id="btnNext">Next level</button>
+        </div>
+
+        <div class="overlay" id="ovEnd" hidden>
+          <h1 id="endTitle">Round over</h1>
+          <div class="big" id="endScore">0</div>
+          <p id="endStats"></p>
+          <button class="cta" id="btnAgain">Play again</button>
+        </div>
+
+        <div class="overlay" id="ovPause" hidden>
+          <h1>Paused</h1>
+          <button class="cta" id="btnResume">Resume</button>
+        </div>
+      </div>
+
+      <!-- Sidebar Controls & Top View -->
+      <aside>
+        <div class="sec">
+          <h2>Playing area — top view</h2>
+          <canvas id="radar" width="560" height="520"></canvas>
+          <div class="readout"><span>Position</span><span id="roPos">—</span></div>
+          <div class="readout"><span>Depth from wall</span><span id="roDepth">—</span></div>
+          <div class="readout"><span>Sensors returning</span><span id="roN">0 / 4</span></div>
+          <div class="readout"><span>Fit residual</span><span id="roRes">—</span></div>
+          <div class="readout"><span>Update rate</span><span id="roHz">— Hz</span></div>
+        </div>
+
+        <div class="sec">
+          <h2>Position source</h2>
+          <div class="seg" role="group">
+            <button data-src="mouse" aria-pressed="true">MOUSE</button>
+            <button data-src="sim" aria-pressed="false">SIMULATED</button>
+            <button data-src="live" aria-pressed="false">LIVE</button>
+          </div>
+          <p class="hint" id="srcHint" style="margin-top:0.5rem"></p>
+          <div class="field" id="wsField" hidden>
+            <label>WebSocket <b id="wsState">closed</b></label>
+            <input id="wsUrl" value="ws://localhost:8765" style="width:100%;background:var(--ink);border:1px solid var(--line);color:var(--data);font:500 0.65rem var(--mono);padding:0.35rem;border-radius:2px">
+            <button class="cta ghost" id="wsConnect" style="width:100%;margin-top:0.4rem;padding:0.4rem;font-size:0.7rem">Connect</button>
+          </div>
+        </div>
+
+        <div class="sec">
+          <h2>Sensor model</h2>
+          <div class="field">
+            <label>Range noise σ <b id="vNoise">8 mm</b></label>
+            <input type="range" id="sNoise" min="0" max="60" value="8">
+          </div>
+          <div class="field">
+            <label>Dropout rate <b id="vDrop">3 %</b></label>
+            <input type="range" id="sDrop" min="0" max="40" value="3">
+          </div>
+          <div class="field">
+            <label>Beam half-angle <b id="vBeam">30°</b></label>
+            <input type="range" id="sBeam" min="10" max="60" value="30">
+          </div>
+          <div class="field">
+            <label>Smoothing α <b id="vAlpha">0.35</b></label>
+            <input type="range" id="sAlpha" min="5" max="100" value="35">
+          </div>
+          <p class="hint" style="margin-top:0.5rem">
+            Lower α = smoother but laggier. This is the trade-off you'll be asked to defend at the design review.
+          </p>
+        </div>
+
+        <div class="sec">
+          <h2>Sensor layout</h2>
+          <div class="seg" role="group">
+            <button data-lay="4lin" aria-pressed="true">4 IN LINE</button>
+            <button data-lay="2box" aria-pressed="false">2 BOXES</button>
+            <button data-lay="4wide" aria-pressed="false">4 SPLAYED</button>
+          </div>
+          <p class="hint" style="margin-top:0.5rem" id="layHint"></p>
+        </div>
+
+        <div class="sec">
+          <details>
+            <summary>Firmware contract</summary>
+            <p class="hint" style="margin-bottom:0.5rem">
+              In <code>LIVE</code> mode the game reads JSON frames off a WebSocket. Ranges are millimetres to the nearest surface; use <code>null</code> for no echo.
+            </p>
+            <pre>{ "box": 0,
+  "t": 184213,
+  "ranges": [1420, 1655, null, 1390] }</pre>
+            <p class="hint">
+              Index into <code>ranges</code> must match the sensor order drawn on the top view. Frames older than 400 ms are treated as stale.
+            </p>
+          </details>
+        </div>
+      </aside>
+    </main>
+
+    <!-- Footer -->
+    <footer>
+      <div class="dot" id="stDot"></div>
+      <span id="stText">Ready</span>
+      <span class="spacer"></span>
+      <span id="stArea">1.50 × 1.40 m play area · 0.60 m dead zone</span>
+    </footer>
+  </div>
+
+  <!-- Modular Scripts -->
+  <script src="js/config.js"></script>
+  <script src="js/audio.js"></script>
+  <script src="js/solver.js"></script>
+  <script src="js/tracker.js"></script>
+  <script src="js/renderer.js"></script>
+  <script src="js/radar.js"></script>
+  <script src="js/game.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

@@ -1,12 +1,12 @@
 @echo off
 REM ───────────────────────────────────────────────────────────────────────────
 REM  Build MOLEFIELD.exe — one self-contained file, no Python on the target PC
-REM  Run this from the molefield folder on a Windows machine with Python 3.10+
+REM  Run this from the project root on a Windows machine with Python 3.10+
 REM ───────────────────────────────────────────────────────────────────────────
 
 echo.
-echo   MOLEFIELD build
-echo   ---------------
+echo   MOLEFIELD Windows Build
+echo   -----------------------
 
 where python >nul 2>nul
 if errorlevel 1 (
@@ -24,10 +24,11 @@ if errorlevel 1 (
   exit /b 1
 )
 
-echo   Building...
+echo   Building standalone executable...
 python -m PyInstaller --noconfirm --onefile --console ^
   --name MOLEFIELD ^
   --add-data "game;game" ^
+  --add-data "bridge;bridge" ^
   molefield.py
 if errorlevel 1 (
   echo   Build failed. Read the error above.
@@ -36,9 +37,8 @@ if errorlevel 1 (
 )
 
 echo.
-echo   Done.  dist\MOLEFIELD.exe
+echo   Done: dist\MOLEFIELD.exe
 echo.
-echo   Hand that single file to anyone — double-clicking it starts the
-echo   bridge and opens the game. Nothing else to install.
+echo   Double-clicking MOLEFIELD.exe starts the bridge and opens the game.
 echo.
 pause
