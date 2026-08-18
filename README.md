@@ -93,12 +93,31 @@ $$\text{minimise } \sum_{i} \left( \|\mathbf{p} - \mathbf{s}_i\| - d_i \right)^2
 
 ## Network Protocol
 
-### Inbound Range Datagrams (UDP Port 4210)
-Each ESP32 sensor box sends one JSON datagram per ping cycle:
+### Inbound Range Datagrams (UDP Port 5000)
+The bridge listens on `UDP :5000` — the port used by the deployed ESP32 test
+firmware (`esp_test_files/ESP_code/Box1`, `Box2`) — and accepts either wire
+format it receives, auto-detected per datagram:
+
+**Plain-text (current hardware, `esp_test_files/ESP_code`):**
+```
+Box:1,S1:120.5,S2:115.2
+```
+Box IDs are 1-indexed on the hardware; `Sn` values are centimetres to the
+nearest surface, `-1` means no echo. The bridge normalises box IDs to
+0-indexed and converts centimetres to millimetres internally.
+
+**JSON (`firmware/molefield_sensor.ino`, not yet flashed):**
 ```json
 {"box": 0, "t": 184213, "ranges": [1420, 1655], "batt": 5210}
 ```
 * `ranges`: Distances in millimetres to the nearest reflective surface (`null` if no echo was detected).
+
+### Setup Wizard
+The game's `LIVE` position source opens an in-page setup wizard: enter the
+bridge's WebSocket address, connect, and confirm each box shows a green
+status dot with a live packet rate before starting a round. Box health
+(alive / Hz / sender IP) rides along in the same WebSocket frames the bridge
+already streams to the game.
 
 ### Slot Synchronization Beacon (UDP Port 4211)
 The PC bridge broadcasts a slot synchronization beacon at ~15.6 Hz:
@@ -106,7 +125,7 @@ The PC bridge broadcasts a slot synchronization beacon at ~15.6 Hz:
 beacon ──▶ │ box0 s0 │ box0 s1 │ box1 s0 │ box1 s1 │ ...idle... │
             0 ms      16 ms     32 ms     48 ms     64 ms
 ```
-Staggering sensor pings into distinct time slots prevents acoustic cross-talk and false echo detections.
+Staggering sensor pings into distinct time slots prevents acoustic cross-talk and false echo detections. The deployed test firmware doesn't listen for this beacon yet — it's consumed only once boxes are reflashed with `firmware/molefield_sensor.ino`.
 
 ---
 

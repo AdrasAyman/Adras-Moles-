@@ -39,7 +39,7 @@ BODY_R: float = 0.20      # Modelled torso radius for surface-to-center offset
 DEFAULTS: dict[str, int | float] = {
     "http": 8000,
     "ws": 8765,
-    "udp": 4210,
+    "udp": 5000,   # matches the deployed ESP32 test firmware (esp_test_files/ESP_code)
     "sync": 4211,
     "rate": 30.0,         # Frames per second pushed to the game UI over WS
     "sync_hz": 15.6,      # Ping slot beacon cycles per second across all boxes

@@ -80,3 +80,20 @@ class SensorHub:
                 (b, dict(v, alive=(now - v["last"]) < 1.0))
                 for b, v in self.boxes.items()
             )
+
+    def health(self) -> list[dict]:
+        """
+        Returns a JSON-serializable per-box health summary (id, alive, packet
+        rate, sender address, time since last packet) for setup/status UIs.
+        """
+        now = time.monotonic()
+        return [
+            {
+                "box": b,
+                "alive": v["alive"],
+                "hz": round(v["hz"], 1),
+                "addr": v["addr"],
+                "age_ms": round((now - v["last"]) * 1000.0),
+            }
+            for b, v in self.live_boxes()
+        ]

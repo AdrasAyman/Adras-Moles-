@@ -77,6 +77,31 @@
           <h1>Paused</h1>
           <button class="cta" id="btnResume">Resume</button>
         </div>
+
+        <div class="overlay" id="ovSetup" hidden>
+          <h1>Connect your sensors</h1>
+          <p>
+            Power on both ESP32 boxes and let them join the bridge PC's Wi-Fi network — they start streaming as soon as <code>python molefield.py</code> is running. Enter its WebSocket address below and confirm both boxes go green before you start a round.
+          </p>
+          <div class="setup-panel">
+            <div class="field">
+              <label>Bridge WebSocket address</label>
+              <input id="wsUrl" value="ws://localhost:8765" style="width:100%;background:var(--ink);border:1px solid var(--line);color:var(--data);font:500 0.7rem var(--mono);padding:0.45rem;border-radius:2px">
+            </div>
+            <button class="cta ghost" id="setupConnect" style="width:100%;margin-top:0.5rem;padding:0.5rem">Connect</button>
+            <div class="readout" style="margin-top:0.5rem"><span>Connection</span><span id="setupWsState">closed</span></div>
+            <table class="boxtable" id="boxTable">
+              <thead><tr><th></th><th>Box</th><th>IP</th><th>Rate</th><th>Last packet</th></tr></thead>
+              <tbody id="boxTableBody">
+                <tr><td colspan="5" class="hint">Not connected yet.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div style="display:flex;gap:0.6rem;flex-wrap:wrap;justify-content:center">
+            <button class="cta ghost" id="btnSetupSkip">Use mouse instead</button>
+            <button class="cta" id="btnSetupDone" disabled>Start playing live</button>
+          </div>
+        </div>
       </div>
 
       <!-- Sidebar Controls & Top View -->
@@ -92,6 +117,11 @@
         </div>
 
         <div class="sec">
+          <h2>Sensor readings</h2>
+          <div id="sensorList" class="sensor-list"></div>
+        </div>
+
+        <div class="sec">
           <h2>Position source</h2>
           <div class="seg" role="group">
             <button data-src="mouse" aria-pressed="true">MOUSE</button>
@@ -100,9 +130,8 @@
           </div>
           <p class="hint" id="srcHint" style="margin-top:0.5rem"></p>
           <div class="field" id="wsField" hidden>
-            <label>WebSocket <b id="wsState">closed</b></label>
-            <input id="wsUrl" value="ws://localhost:8765" style="width:100%;background:var(--ink);border:1px solid var(--line);color:var(--data);font:500 0.65rem var(--mono);padding:0.35rem;border-radius:2px">
-            <button class="cta ghost" id="wsConnect" style="width:100%;margin-top:0.4rem;padding:0.4rem;font-size:0.7rem">Connect</button>
+            <div class="readout"><span>Bridge link</span><span id="wsState">closed</span></div>
+            <button class="cta ghost" id="btnReopenSetup" style="width:100%;margin-top:0.4rem;padding:0.4rem;font-size:0.7rem">Setup / reconnect sensors</button>
           </div>
         </div>
 
@@ -143,13 +172,17 @@
           <details>
             <summary>Firmware contract</summary>
             <p class="hint" style="margin-bottom:0.5rem">
-              In <code>LIVE</code> mode the game reads JSON frames off a WebSocket. Ranges are millimetres to the nearest surface; use <code>null</code> for no echo.
+              In <code>LIVE</code> mode the bridge (<code>python molefield.py</code>) listens for ESP32 sensor boxes on <code>UDP :5000</code> and forwards merged frames to this page over WebSocket. It accepts the deployed test firmware's plain-text datagrams:
+            </p>
+            <pre>Box:1,S1:120.5,S2:115.2</pre>
+            <p class="hint" style="margin:0.4rem 0">
+              (<code>Sn</code> values are centimetres to the nearest surface; <code>-1</code> means no echo.) It also accepts the JSON format from <code>firmware/molefield_sensor.ino</code>:
             </p>
             <pre>{ "box": 0,
   "t": 184213,
-  "ranges": [1420, 1655, null, 1390] }</pre>
+  "ranges": [1420, 1655] }</pre>
             <p class="hint">
-              Index into <code>ranges</code> must match the sensor order drawn on the top view. Frames older than 400 ms are treated as stale.
+              Box order must match the sensor layout selected above. Frames older than 400 ms are treated as stale.
             </p>
           </details>
         </div>
@@ -173,6 +206,7 @@
   <script src="js/renderer.js"></script>
   <script src="js/radar.js"></script>
   <script src="js/game.js"></script>
+  <script src="js/setup.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

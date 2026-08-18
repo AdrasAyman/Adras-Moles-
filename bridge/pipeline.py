@@ -36,10 +36,12 @@ def pump(
     while not stop.is_set():
         r = hub.snapshot()
 
-        # Broadcast frame to WebSocket clients
+        # Broadcast frame to WebSocket clients, including per-box health so the
+        # site's setup wizard can show which sensor boxes are actually reporting.
         frame_payload = {
             "t": int((time.monotonic() - t0) * 1000),
             "ranges": [None if v is None else round(v * 1000) for v in r],
+            "boxes": hub.health(),
         }
         ws.broadcast(json.dumps(frame_payload))
 

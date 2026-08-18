@@ -129,5 +129,5 @@ const LEVELS = [
 const SRC_HINT = {
   mouse: "The mouse is the body. Sensors are simulated for the top view only — the game reads the pointer directly, so tracking is perfect. Use this to tune the game itself.",
   sim: "The mouse is the true body position. The game only sees four noisy ultrasonic ranges and solves for you. This is the real pipeline, and the cyan dot is the unfiltered fix.",
-  live: "Ranges come from your ESP32 boxes over a WebSocket. Same solver, same filter, real hardware."
+  live: "Ranges come from your ESP32 boxes over a WebSocket. Same solver, same filter, real hardware. Opens the setup wizard to confirm both boxes are reporting."
 };

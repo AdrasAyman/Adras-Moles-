@@ -19,6 +19,7 @@ const Tracker = {
   hzT: 0,
   stale: false,
   layout: "4lin",
+  wsState: "closed",
 
   get sensors() {
     return LAYOUTS[this.layout].s;
@@ -33,6 +34,7 @@ const Tracker = {
   live: {
     ws: null,
     ranges: [],
+    boxes: [],
     t: 0
   },
 
@@ -100,21 +102,14 @@ const Tracker = {
       if (this.live.ws) this.live.ws.close();
     } catch (e) {}
 
-    const wsStateEl = document.getElementById("wsState");
-    if (wsStateEl) wsStateEl.textContent = "connecting";
+    this.wsState = "connecting";
 
     const ws = new WebSocket(url);
     this.live.ws = ws;
 
-    ws.onopen = () => {
-      if (wsStateEl) wsStateEl.textContent = "open";
-    };
-    ws.onclose = () => {
-      if (wsStateEl) wsStateEl.textContent = "closed";
-    };
-    ws.onerror = () => {
-      if (wsStateEl) wsStateEl.textContent = "error";
-    };
+    ws.onopen = () => { this.wsState = "open"; };
+    ws.onclose = () => { this.wsState = "closed"; };
+    ws.onerror = () => { this.wsState = "error"; };
     ws.onmessage = ev => {
       try {
         const m = JSON.parse(ev.data);
@@ -140,6 +135,7 @@ const Tracker = {
           out[m.id] = m.mm == null ? null : m.mm / 1000.0;
           this.live.ranges = out;
         }
+        if (Array.isArray(m.boxes)) this.live.boxes = m.boxes;
         this.live.t = performance.now();
       } catch (e) {}
     };

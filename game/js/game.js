@@ -184,14 +184,14 @@ function endRun(title) {
 }
 
 function showOverlay(sel) {
-  ["#ovStart", "#ovLevel", "#ovEnd", "#ovPause"].forEach(s => {
+  ["#ovStart", "#ovLevel", "#ovEnd", "#ovPause", "#ovSetup"].forEach(s => {
     const el = document.querySelector(s);
     if (el) el.hidden = s !== sel;
   });
 }
 
 function hideAllOverlays() {
-  ["#ovStart", "#ovLevel", "#ovEnd", "#ovPause"].forEach(s => {
+  ["#ovStart", "#ovLevel", "#ovEnd", "#ovPause", "#ovSetup"].forEach(s => {
     const el = document.querySelector(s);
     if (el) el.hidden = true;
   });

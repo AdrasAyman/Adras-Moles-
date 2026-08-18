@@ -20,7 +20,41 @@ function fitStageIfNeeded() {
   }
 }
 
+function buildSensorRows() {
+  const list = $("#sensorList");
+  if (!list) return;
+  list.innerHTML = Tracker.sensors.map((sen, i) => {
+    const box = Math.floor(i / 2) + 1;
+    const slot = (i % 2) + 1;
+    return `
+      <div class="sensrow" data-i="${i}">
+        <span class="sdot"></span>
+        <span class="slabel">S${i}<small>Box ${box} · S${slot}</small></span>
+        <span class="sbar"><i></i></span>
+        <span class="sval">—</span>
+      </div>`;
+  }).join("");
+}
+
+const SENSOR_BAR_MAX_M = 3.0;
+
+function updateSensorReadings() {
+  document.querySelectorAll("#sensorList .sensrow").forEach(row => {
+    const r = Tracker.ranges[+row.dataset.i];
+    const has = r != null;
+    const dot = row.querySelector(".sdot");
+    const bar = row.querySelector(".sbar i");
+    const val = row.querySelector(".sval");
+    if (dot) dot.classList.toggle("ok", has);
+    if (bar) bar.style.width = has ? `${Math.min(100, (r / SENSOR_BAR_MAX_M) * 100.0).toFixed(0)}%` : "0%";
+    if (val) val.textContent = has ? `${r.toFixed(2)} m` : "—";
+  });
+}
+
 function updateHUD() {
+  if (Tracker.src === "live") Setup.tick();
+  updateSensorReadings();
+
   const uiScore = $("#uiScore");
   const uiLevel = $("#uiLevel");
   const uiStreak = $("#uiStreak");
@@ -223,6 +257,7 @@ function initApp() {
       const wsField = $("#wsField");
       if (hint) hint.textContent = SRC_HINT[Tracker.src];
       if (wsField) wsField.hidden = Tracker.src !== "live";
+      if (Tracker.src === "live") Setup.open();
     };
   });
 
@@ -234,14 +269,28 @@ function initApp() {
       Tracker.live.ranges = [];
       const hint = $("#layHint");
       if (hint) hint.textContent = LAYOUTS[Tracker.layout].hint;
+      buildSensorRows();
     };
   });
 
-  const wsConnect = $("#wsConnect");
-  if (wsConnect) {
-    wsConnect.onclick = () => {
-      const wsUrlInput = $("#wsUrl");
-      if (wsUrlInput) Tracker.connect(wsUrlInput.value.trim());
+  // ── Setup Wizard (connect / reconnect ESP32 boxes) ──────────────────────────
+  const setupConnect = $("#setupConnect");
+  if (setupConnect) setupConnect.onclick = () => Setup.connect();
+
+  const btnReopenSetup = $("#btnReopenSetup");
+  if (btnReopenSetup) btnReopenSetup.onclick = () => Setup.open();
+
+  const btnSetupDone = $("#btnSetupDone");
+  if (btnSetupDone) {
+    btnSetupDone.onclick = () => { Audio_.init(); hideAllOverlays(); resetRun(); };
+  }
+
+  const btnSetupSkip = $("#btnSetupSkip");
+  if (btnSetupSkip) {
+    btnSetupSkip.onclick = () => {
+      const mouseBtn = document.querySelector('[data-src="mouse"]');
+      if (mouseBtn) mouseBtn.click();
+      hideAllOverlays();
     };
   }
 
@@ -282,10 +331,7 @@ function initApp() {
     const src = q.get("src");
     if (src === "live" || src === "sim") {
       const b = document.querySelector(`[data-src="${src}"]`);
-      if (b) b.click();
-      if (src === "live" && wsUrlInput) {
-        Tracker.connect(wsUrlInput.value.trim());
-      }
+      if (b) b.click(); // "live" click already opens the setup wizard and connects
     }
   })();
 
@@ -294,6 +340,7 @@ function initApp() {
   if (srcHint) srcHint.textContent = SRC_HINT[Tracker.src];
   if (layHint) layHint.textContent = LAYOUTS[Tracker.layout].hint;
 
+  buildSensorRows();
   buildHoles();
   fitStage();
   window.addEventListener("resize", fitStage);
