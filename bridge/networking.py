@@ -38,15 +38,36 @@ def udp_listener(
         except OSError:
             break
 
+        text = data.decode("utf-8", "replace").strip()
         try:
-            msg = json.loads(data.decode("utf-8", "replace"))
+            msg = json.loads(text)
             hub.ingest(
                 box=int(msg.get("box", 0)),
                 ranges_mm=list(msg.get("ranges", [])),
                 sender=addr[0],
             )
         except (ValueError, TypeError):
-            hub.bad += 1
+            # Fallback parser for string payloads like "Box:1,S1:105.2,S2:98.4"
+            if text.startswith("Box:"):
+                try:
+                    parts = text.split(",")
+                    box_id = int(parts[0].split(":")[1])
+                    # If 1-indexed (Box:1, Box:2), map to 0-indexed (0, 1)
+                    if box_id in (1, 2) and 0 not in hub.map and 1 in hub.map:
+                        norm_box = box_id - 1
+                    else:
+                        norm_box = box_id
+                    
+                    ranges = []
+                    for p in parts[1:]:
+                        if ":" in p:
+                            val_cm = float(p.split(":")[1])
+                            ranges.append(round(val_cm * 10.0) if val_cm > 0 else None)
+                    hub.ingest(box=norm_box, ranges_mm=ranges, sender=addr[0])
+                except Exception:
+                    hub.bad += 1
+            else:
+                hub.bad += 1
 
     sock.close()
 

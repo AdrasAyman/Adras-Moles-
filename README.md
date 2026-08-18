@@ -57,11 +57,14 @@ Test the entire pipeline with a synthetic walking body:
 python molefield.py --simulate
 ```
 
-### 2. Live Hardware Mode
-Start the UDP receiver and slot synchronization beacon for physical ESP32 sensor boxes:
+### 2. Live Hardware Mode (Standalone ESP32 Access Point)
+* **ESP32 Box 0** automatically broadcasts its own Wi-Fi network: **`MOLEFIELD`** (Password: **`whackamole`**).
+* **ESP32 Box 1** connects automatically to Box 0.
+* Connect your Laptop / PC Wi-Fi to **`MOLEFIELD`**, then run:
 ```bash
 python molefield.py
 ```
+*(No external router, internet, or mobile hotspot required!)*
 
 ### 3. Record Telemetry to CSV
 Record every frame and solved position for analysis and design reviews:

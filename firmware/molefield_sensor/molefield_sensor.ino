@@ -35,18 +35,23 @@
 /* ── Per-Box Configuration ──────────────────────────────────────────────── */
 #define BOX_ID            0            // 0 or 1 — MUST differ between physical boxes
 
-const char* WIFI_SSID   = "MOLEFIELD";
-const char* WIFI_PASS   = "whackamole";
+// Networking Mode:
+// true  = Standalone AP mode (Box 0 creates Wi-Fi "Dylan&CO.", Box 1 & PC join it)
+// false = External router mode (Both boxes connect to an existing Wi-Fi router)
+#define STANDALONE_AP     true
+
+const char* WIFI_SSID   = "Molefield";
+const char* WIFI_PASS   = "molefield123";
 
 const uint16_t UDP_TX_PORT   = 4210;   // Outbound telemetry datagrams to PC bridge
 const uint16_t UDP_SYNC_PORT = 4211;   // Inbound slot sync beacon from PC bridge
 const bool     USE_BROADCAST = true;   // false -> send unicast to BRIDGE_IP
 IPAddress      BRIDGE_IP(192, 168, 4, 2);
 
-/* ── Hardware Pinout ────────────────────────────────────────────────────── */
+/* ── Hardware Pinout (HC-SR04 / RCWL-1601) ──────────────────────────────── */
 const uint8_t  N_SENSORS = 2;
-const uint8_t  TRIG_PINS[N_SENSORS] = { 25, 27 };
-const uint8_t  ECHO_PINS[N_SENSORS] = { 26, 14 };
+const uint8_t  TRIG_PINS[N_SENSORS] = { 33, 27 };  // Sensor 1: GPIO 33, Sensor 2: GPIO 27
+const uint8_t  ECHO_PINS[N_SENSORS] = { 32, 26 };  // Sensor 1: GPIO 32, Sensor 2: GPIO 26
 
 /* ── Timing & Acoustic Constants ────────────────────────────────────────── */
 const uint16_t SLOT_MS         = 16;    // Time window allocated per sensor (ms)
@@ -140,6 +145,27 @@ void setup() {
     analogSetPinAttenuation(VBAT_PIN, ADC_11db);
   }
 
+#if STANDALONE_AP
+  #if BOX_ID == 0
+  // ── Box 0: Broadcasts the standalone Wi-Fi Access Point ──
+  WiFi.mode(WIFI_AP);
+  WiFi.softAP(WIFI_SSID, WIFI_PASS);
+  Serial.printf("\nSensor Box 0 created Wi-Fi AP '%s'\n", WIFI_SSID);
+  Serial.printf("AP IP address: %s (connect your PC to '%s' with password '%s')\n",
+                WiFi.softAPIP().toString().c_str(), WIFI_SSID, WIFI_PASS);
+  #else
+  // ── Box 1: Connects to Box 0's Wi-Fi Access Point ──
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(WIFI_SSID, WIFI_PASS);
+  Serial.printf("Sensor Box %d connecting to AP '%s'", BOX_ID, WIFI_SSID);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(250);
+    Serial.print(".");
+  }
+  Serial.printf("\nSensor Box %d connected to AP at IP: %s\n", BOX_ID, WiFi.localIP().toString().c_str());
+  #endif
+#else
+  // ── External Router Mode: Both boxes join existing network ──
   WiFi.mode(WIFI_STA);
   WiFi.setSleep(true);               // Modem sleep between packet bursts
   WiFi.setTxPower(WIFI_POWER_11dBm); // Sufficient across a room, conserves battery
@@ -151,6 +177,7 @@ void setup() {
     Serial.print(".");
   }
   Serial.printf("\nSensor box %d ready at IP: %s\n", BOX_ID, WiFi.localIP().toString().c_str());
+#endif
 
   udpTx.begin(0);
   udpSync.begin(UDP_SYNC_PORT);
