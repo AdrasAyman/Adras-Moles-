@@ -33,7 +33,7 @@ const Tracker = {
   live: {
     ws: null,
     ranges: [],
-    t: 0
+    t: 1
   },
 
   update(dt) {
