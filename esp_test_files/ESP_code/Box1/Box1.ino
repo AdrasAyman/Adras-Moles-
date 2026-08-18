@@ -4,13 +4,13 @@
 // ================================================================
 // CONFIGURATION
 // ================================================================
-#define BOX_ID 1 
+#define BOX_ID 2
 
-const char* WIFI_SSID = ""; //Enter wifi name
-const char* WIFI_PASS = ""; // Eneter password for wifi
+const char* WIFI_SSID = "Dylan&CO."; //Enter wifi name
+const char* WIFI_PASS = "32694209"; // Eneter password for wifi
 
 // Use IPAddress type directly instead of a text string
-const IPAddress PC_IP( );  // Enter you ipV4 address seperated by commas eg 1, 1, 1, 1
+const IPAddress PC_IP(255, 255, 255, 255); 
 const int UDP_PORT = 5000;
 
 WiFiUDP udp;
