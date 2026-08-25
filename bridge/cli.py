@@ -86,7 +86,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--layout",
         choices=list(LAYOUTS.keys()),
-        default="4lin",
+        default="2box4s",
         help="sensor geometry; must match the game sidebar",
     )
     parser.add_argument(

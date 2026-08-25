@@ -138,12 +138,19 @@ void runCycle() {
   udpTx.endPacket();
 #endif
 
-  // Periodic Serial debug output
+  // Periodic Serial debug output matching electrical team's format
   static unsigned long lastSerialPrint = 0;
-  if (millis() - lastSerialPrint >= 500) {
+  if (millis() - lastSerialPrint >= 100) {
     lastSerialPrint = millis();
-    Serial.printf("[Box %d] S0:%ld mm | S1:%ld mm | Packet: %s\n",
-                  BOX_ID, mm[0], mm[1], packet);
+    long dist1_cm = (mm[0] > 0) ? mm[0] / 10 : -1;
+    long dist2_cm = (mm[1] > 0) ? mm[1] / 10 : -1;
+    
+    Serial.print("distance1: ");
+    Serial.print(dist1_cm);
+    Serial.print("\t");
+    Serial.print("distance2: ");
+    Serial.print(dist2_cm);
+    Serial.println(" cm");
   }
 }
 
@@ -209,7 +216,7 @@ void setup() {
 }
 
 unsigned long lastCycleTime = 0;
-const unsigned long FALLBACK_CYCLE_MS = 65; // ~15.4 Hz autonomous fallback timer
+const unsigned long FALLBACK_CYCLE_MS = 150; // Fallback timer if PC sync beacon is lost
 
 void loop() {
   // Check for PC synchronization beacon

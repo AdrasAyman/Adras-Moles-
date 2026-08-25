@@ -175,8 +175,8 @@
             <input type="range" id="sBeam" min="10" max="60" value="30">
           </div>
           <div class="field">
-            <label>Smoothing α <b id="vAlpha">0.35</b></label>
-            <input type="range" id="sAlpha" min="5" max="100" value="35">
+            <label>Smoothing α <b id="vAlpha">0.20</b></label>
+            <input type="range" id="sAlpha" min="5" max="100" value="20">
           </div>
           <p class="hint" style="margin-top:0.5rem">
             Lower α = smoother but laggier. This is the trade-off you'll be asked to defend at the design review.
@@ -186,8 +186,8 @@
         <div class="sec">
           <h2>Sensor layout</h2>
           <div class="seg" role="group">
-            <button data-lay="4lin" aria-pressed="true">4 IN LINE</button>
-            <button data-lay="2box4s" aria-pressed="false">2 CORNER BOXES</button>
+            <button data-lay="4lin" aria-pressed="false">4 IN LINE</button>
+            <button data-lay="2box4s" aria-pressed="true">2 CORNER BOXES</button>
             <button data-lay="4wide" aria-pressed="false">4 SPLAYED</button>
           </div>
           <p class="hint" style="margin-top:0.5rem" id="layHint"></p>
