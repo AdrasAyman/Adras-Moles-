@@ -76,13 +76,39 @@ const Tracker = {
     if (measured) {
       this.raw = measured;
       const a = this.src === "mouse" ? 1.0 : this.alpha;
+      const b = (a * a) / (2.0 - a); // Optimal beta for critically damped filter
+      
       if (!this.pos) {
-        this.pos = { x: measured.x, y: measured.y };
+        this.pos = { x: measured.x, y: measured.y, vx: 0, vy: 0 };
       } else {
-        // Exponential moving average, frame-rate compensated
-        const k = 1.0 - Math.pow(1.0 - a, Math.min(3.0, dt * 60.0));
-        this.pos.x += (measured.x - this.pos.x) * k;
-        this.pos.y += (measured.y - this.pos.y) * k;
+        // Alpha-Beta Predict-Correct Filter
+        // 1. Predict next state based on current velocity
+        let px = this.pos.x + (this.pos.vx || 0) * dt;
+        let py = this.pos.y + (this.pos.vy || 0) * dt;
+        
+        // 2. Calculate residual (measurement error)
+        let rx = measured.x - px;
+        let ry = measured.y - py;
+        
+        // 3. Outlier rejection: cap massive instantaneous jumps (>1.0m) to prevent violent jerks
+        if (this.src !== "mouse") {
+           const jumpDist = Math.hypot(rx, ry);
+           if (jumpDist > 1.0) {
+             rx = (rx / jumpDist) * 1.0;
+             ry = (ry / jumpDist) * 1.0;
+           }
+        }
+
+        // 4. Correct state
+        const safeDt = Math.max(dt, 0.001);
+        this.pos.x = px + a * rx;
+        this.pos.y = py + a * ry;
+        this.pos.vx = (this.pos.vx || 0) + (b / safeDt) * rx;
+        this.pos.vy = (this.pos.vy || 0) + (b / safeDt) * ry;
+        
+        // 5. Apply friction to velocity so cursor stops cleanly when standing still
+        this.pos.vx *= 0.85;
+        this.pos.vy *= 0.85;
       }
     }
 

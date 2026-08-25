@@ -82,11 +82,15 @@ long pingSensor(uint8_t i) {
   long mm = (long)(us * SPEED_OF_SOUND / 2.0f);
   if (mm < 40 || mm > 4000) return -1; // Outside honest sensor operating window
 
-  /* Spike Guard: A single reading jumping > 500 mm is typically cross-talk
-     or acoustic multipath bounce. Reject once, then accept if confirmed. */
+  /* Spike Guard: A single reading jumping > 500 mm is typically cross-talk. Reject once. */
   if (lastRange[i] != 0 && labs(mm - (long)lastRange[i]) > 500) {
     lastRange[i] = mm;
     return -1;
+  }
+  
+  // Apply a light Exponential Moving Average (EMA) to smooth out natural ultrasonic jitter
+  if (lastRange[i] != 0) {
+    mm = (mm * 3 + lastRange[i] * 7) / 10; // 30% new, 70% old
   }
   lastRange[i] = mm;
   return mm;

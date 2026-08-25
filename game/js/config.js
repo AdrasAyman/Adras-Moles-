@@ -35,12 +35,12 @@ const LAYOUTS = {
   },
   "2box4s": {
     name: "2 CORNER BOXES (4 SENSORS)",
-    hint: "Box 0 on left, Box 1 on right. One sensor in each box faces the wall along the edge (±90°), and the other faces 45° into the table.",
+    hint: "Box 0 on left, Box 1 on right. Sensor 0/2 faces 45° into the table, and Sensor 1/3 faces the wall along the edge (±90°).",
     s: [
-      { x: 0.00, y: 0.30, a: -90.0 },
       { x: 0.00, y: 0.30, a: 45.0 },
-      { x: 1.50, y: 0.30, a: -45.0 },
-      { x: 1.50, y: 0.30, a: 90.0 }
+      { x: 0.00, y: 0.30, a: -90.0 },
+      { x: 1.50, y: 0.30, a: 90.0 },
+      { x: 1.50, y: 0.30, a: -45.0 }
     ]
   },
   "2box": {
