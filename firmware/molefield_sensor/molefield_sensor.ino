@@ -50,8 +50,8 @@ IPAddress      BRIDGE_IP(192, 168, 4, 2);
 
 /* ── Hardware Pinout (HC-SR04 / RCWL-1601) ──────────────────────────────── */
 const uint8_t  N_SENSORS = 2;
-const uint8_t  TRIG_PINS[N_SENSORS] = { 33, 27 };  // Sensor 1: GPIO 33, Sensor 2: GPIO 27
-const uint8_t  ECHO_PINS[N_SENSORS] = { 32, 26 };  // Sensor 1: GPIO 32, Sensor 2: GPIO 26
+const uint8_t  TRIG_PINS[N_SENSORS] = { 32, 26 };  // Sensor 1: GPIO 32, Sensor 2: GPIO 26
+const uint8_t  ECHO_PINS[N_SENSORS] = { 35, 27 };  // Sensor 1: GPIO 35, Sensor 2: GPIO 27
 
 /* ── Timing & Acoustic Constants ────────────────────────────────────────── */
 const uint16_t SLOT_MS         = 16;    // Time window allocated per sensor (ms)
@@ -130,6 +130,21 @@ void runCycle() {
   udpTx.beginPacket(dest, UDP_TX_PORT);
   udpTx.print(packet);
   udpTx.endPacket();
+
+  // Also broadcast to SoftAP subnet in standalone mode
+#if STANDALONE_AP
+  udpTx.beginPacket(IPAddress(192, 168, 4, 255), UDP_TX_PORT);
+  udpTx.print(packet);
+  udpTx.endPacket();
+#endif
+
+  // Periodic Serial debug output
+  static unsigned long lastSerialPrint = 0;
+  if (millis() - lastSerialPrint >= 500) {
+    lastSerialPrint = millis();
+    Serial.printf("[Box %d] S0:%ld mm | S1:%ld mm | Packet: %s\n",
+                  BOX_ID, mm[0], mm[1], packet);
+  }
 }
 
 /* ── Setup & Main Loop ──────────────────────────────────────────────────── */
@@ -148,21 +163,31 @@ void setup() {
 #if STANDALONE_AP
   #if BOX_ID == 0
   // ── Box 0: Broadcasts the standalone Wi-Fi Access Point ──
-  WiFi.mode(WIFI_AP);
+  WiFi.mode(WIFI_AP_STA);
   WiFi.softAP(WIFI_SSID, WIFI_PASS);
-  Serial.printf("\nSensor Box 0 created Wi-Fi AP '%s'\n", WIFI_SSID);
-  Serial.printf("AP IP address: %s (connect your PC to '%s' with password '%s')\n",
-                WiFi.softAPIP().toString().c_str(), WIFI_SSID, WIFI_PASS);
+  Serial.printf("\n========================================\n");
+  Serial.printf("Sensor Box 0 created Wi-Fi AP '%s'\n", WIFI_SSID);
+  Serial.printf("AP IP address: %s\n", WiFi.softAPIP().toString().c_str());
+  Serial.printf("Connect your Laptop to '%s' (Pass: '%s')\n", WIFI_SSID, WIFI_PASS);
+  Serial.printf("========================================\n");
   #else
   // ── Box 1: Connects to Box 0's Wi-Fi Access Point ──
   WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_PASS);
-  Serial.printf("Sensor Box %d connecting to AP '%s'", BOX_ID, WIFI_SSID);
+  Serial.printf("\nSensor Box %d connecting to AP '%s'...", BOX_ID, WIFI_SSID);
+  int attempts = 0;
   while (WiFi.status() != WL_CONNECTED) {
-    delay(250);
+    delay(300);
     Serial.print(".");
+    attempts++;
+    if (attempts % 30 == 0) {
+      Serial.printf("\nStill trying to connect to '%s'...\n", WIFI_SSID);
+    }
   }
-  Serial.printf("\nSensor Box %d connected to AP at IP: %s\n", BOX_ID, WiFi.localIP().toString().c_str());
+  Serial.printf("\n========================================\n");
+  Serial.printf("Sensor Box %d connected to AP!\n", BOX_ID);
+  Serial.printf("Assigned IP: %s\n", WiFi.localIP().toString().c_str());
+  Serial.printf("========================================\n");
   #endif
 #else
   // ── External Router Mode: Both boxes join existing network ──
@@ -183,24 +208,35 @@ void setup() {
   udpSync.begin(UDP_SYNC_PORT);
 }
 
+unsigned long lastCycleTime = 0;
+const unsigned long FALLBACK_CYCLE_MS = 65; // ~15.4 Hz autonomous fallback timer
+
 void loop() {
+  // Check for PC synchronization beacon
   int sz = udpSync.parsePacket();
-  if (sz <= 0) {
-    delay(1);
-    return;
+  if (sz > 0) {
+    char buf[64];
+    int len = udpSync.read(buf, sizeof(buf) - 1);
+    if (len > 0) {
+      buf[len] = 0;
+      char* p = strstr(buf, "\"sync\":");
+      if (p) {
+        uint16_t seq = (uint16_t)atoi(p + 7);
+        if (seq != lastSeq) {
+          lastSeq = seq;
+          lastCycleTime = millis();
+          runCycle();
+          return;
+        }
+      }
+    }
   }
 
-  char buf[64];
-  int len = udpSync.read(buf, sizeof(buf) - 1);
-  if (len <= 0) return;
-  buf[len] = 0;
+  // Fallback: If no sync beacon arrives from PC within 65ms, ping autonomously
+  if (millis() - lastCycleTime >= FALLBACK_CYCLE_MS) {
+    lastCycleTime = millis();
+    runCycle();
+  }
 
-  // Beacon format: {"sync":1234}
-  char* p = strstr(buf, "\"sync\":");
-  if (!p) return;
-  uint16_t seq = (uint16_t)atoi(p + 7);
-  if (seq == lastSeq) return;
-  lastSeq = seq;
-
-  runCycle();
+  delay(1);
 }

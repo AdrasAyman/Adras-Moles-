@@ -25,7 +25,7 @@ const AREA = {
 const LAYOUTS = {
   "4lin": {
     name: "4 IN LINE",
-    hint: "Two boxes, two sensors each, evenly spread. Best lateral coverage, weakest depth resolution at the far corners.",
+    hint: "Two boxes, two sensors each, evenly spread in a straight line across the wall.",
     s: [
       { x: 0.19, y: 0.30, a: 0 },
       { x: 0.56, y: 0.30, a: 0 },
@@ -33,8 +33,18 @@ const LAYOUTS = {
       { x: 1.31, y: 0.30, a: 0 }
     ]
   },
+  "2box4s": {
+    name: "2 CORNER BOXES (4 SENSORS)",
+    hint: "Two boxes placed 1.5m apart at opposite corners, each with 2 sensors splayed inward for wide room coverage.",
+    s: [
+      { x: 0.06, y: 0.30, a: 25 },
+      { x: 0.12, y: 0.30, a: 10 },
+      { x: 1.38, y: 0.30, a: -10 },
+      { x: 1.44, y: 0.30, a: -25 }
+    ]
+  },
   "2box": {
-    name: "2 BOXES",
+    name: "2 BOXES (2 SENSORS)",
     hint: "One sensor per box at the outer edges. Cheapest build; the far centre gets thin and the fit goes soft.",
     s: [
       { x: 0.10, y: 0.30, a: 14 },
@@ -43,7 +53,7 @@ const LAYOUTS = {
   },
   "4wide": {
     name: "4 SPLAYED",
-    hint: "Outer pair splayed toward the middle. Wider usable footprint, but the beams overlap and cross-talk becomes real.",
+    hint: "Outer pair splayed toward the middle. Wider usable footprint, but the beams overlap.",
     s: [
       { x: 0.06, y: 0.30, a: 26 },
       { x: 0.52, y: 0.30, a: 6 },

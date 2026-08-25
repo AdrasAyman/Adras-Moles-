@@ -73,6 +73,14 @@
           <button class="cta" id="btnAgain">Play again</button>
         </div>
 
+        <!-- Floating on-stage sensor distance monitor bar -->
+        <div id="stageSensorBar">
+          <div class="stage-sc" id="ssc0"><span class="ssc-name">S0</span><span class="ssc-val" id="ssv0">—</span></div>
+          <div class="stage-sc" id="ssc1"><span class="ssc-name">S1</span><span class="ssc-val" id="ssv1">—</span></div>
+          <div class="stage-sc" id="ssc2"><span class="ssc-name">S2</span><span class="ssc-val" id="ssv2">—</span></div>
+          <div class="stage-sc" id="ssc3"><span class="ssc-name">S3</span><span class="ssc-val" id="ssv3">—</span></div>
+        </div>
+
         <div class="overlay" id="ovPause" hidden>
           <h1>Paused</h1>
           <button class="cta" id="btnResume">Resume</button>
@@ -81,6 +89,52 @@
 
       <!-- Sidebar Controls & Top View -->
       <aside>
+        <!-- Dedicated Live 4-Sensor Monitor Widget -->
+        <div class="sec" id="secSensorMonitor">
+          <h2>Live Sensor Distances (4 in line)</h2>
+          <div class="sensor-grid">
+            <div class="sensor-card" id="sc0">
+              <div class="sc-header">
+                <span class="sc-tag box0">BOX 0</span>
+                <span class="sc-title">Sensor 0 (Left)</span>
+              </div>
+              <div class="sc-val" id="sv0">—</div>
+              <div class="sc-sub" id="ss0">No echo</div>
+              <div class="sc-bar-bg"><div class="sc-bar-fill" id="sb0"></div></div>
+            </div>
+
+            <div class="sensor-card" id="sc1">
+              <div class="sc-header">
+                <span class="sc-tag box0">BOX 0</span>
+                <span class="sc-title">Sensor 1 (Mid-Left)</span>
+              </div>
+              <div class="sc-val" id="sv1">—</div>
+              <div class="sc-sub" id="ss1">No echo</div>
+              <div class="sc-bar-bg"><div class="sc-bar-fill" id="sb1"></div></div>
+            </div>
+
+            <div class="sensor-card" id="sc2">
+              <div class="sc-header">
+                <span class="sc-tag box1">BOX 1</span>
+                <span class="sc-title">Sensor 2 (Mid-Right)</span>
+              </div>
+              <div class="sc-val" id="sv2">—</div>
+              <div class="sc-sub" id="ss2">No echo</div>
+              <div class="sc-bar-bg"><div class="sc-bar-fill" id="sb2"></div></div>
+            </div>
+
+            <div class="sensor-card" id="sc3">
+              <div class="sc-header">
+                <span class="sc-tag box1">BOX 1</span>
+                <span class="sc-title">Sensor 3 (Right)</span>
+              </div>
+              <div class="sc-val" id="sv3">—</div>
+              <div class="sc-sub" id="ss3">No echo</div>
+              <div class="sc-bar-bg"><div class="sc-bar-fill" id="sb3"></div></div>
+            </div>
+          </div>
+        </div>
+
         <div class="sec">
           <h2>Playing area — top view</h2>
           <canvas id="radar" width="560" height="520"></canvas>
@@ -133,7 +187,7 @@
           <h2>Sensor layout</h2>
           <div class="seg" role="group">
             <button data-lay="4lin" aria-pressed="true">4 IN LINE</button>
-            <button data-lay="2box" aria-pressed="false">2 BOXES</button>
+            <button data-lay="2box4s" aria-pressed="false">2 CORNER BOXES</button>
             <button data-lay="4wide" aria-pressed="false">4 SPLAYED</button>
           </div>
           <p class="hint" style="margin-top:0.5rem" id="layHint"></p>

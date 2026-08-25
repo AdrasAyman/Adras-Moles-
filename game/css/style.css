@@ -133,6 +133,147 @@ main {
   height: 100%;
 }
 
+/* ── Floating On-Stage Sensor Telemetry Bar ─────────────────── */
+#stageSensorBar {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  display: flex;
+  gap: 8px;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.stage-sc {
+  background: rgba(12, 16, 20, 0.75);
+  backdrop-filter: blur(6px);
+  border: 1px solid rgba(69, 208, 232, 0.25);
+  border-radius: 4px;
+  padding: 4px 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--mono);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.stage-sc.active {
+  border-color: var(--data);
+  background: rgba(12, 16, 20, 0.9);
+}
+
+.ssc-name {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: var(--data);
+  letter-spacing: 0.05em;
+}
+
+.ssc-val {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Sidebar Live Sensor Monitor Widget ─────────────────────── */
+.sensor-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.sensor-card {
+  background: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0.5rem 0.55rem;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.sensor-card.active {
+  border-color: rgba(69, 208, 232, 0.5);
+  box-shadow: 0 0 10px rgba(69, 208, 232, 0.1);
+}
+
+.sensor-card.active.box1 {
+  border-color: rgba(255, 176, 32, 0.5);
+  box-shadow: 0 0 10px rgba(255, 176, 32, 0.1);
+}
+
+.sc-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+}
+
+.sc-tag {
+  font: 700 0.5rem/1 var(--mono);
+  padding: 2px 4px;
+  border-radius: 2px;
+  letter-spacing: 0.05em;
+}
+
+.sc-tag.box0 {
+  background: rgba(69, 208, 232, 0.18);
+  color: var(--data);
+  border: 1px solid rgba(69, 208, 232, 0.35);
+}
+
+.sc-tag.box1 {
+  background: rgba(255, 176, 32, 0.18);
+  color: var(--amber);
+  border: 1px solid rgba(255, 176, 32, 0.35);
+}
+
+.sc-title {
+  font: 500 0.55rem/1 var(--mono);
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sc-val {
+  font: 700 1.15rem/1.1 var(--display);
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  margin-top: 2px;
+}
+
+.sensor-card.active .sc-val {
+  color: var(--signal);
+}
+
+.sc-sub {
+  font: 500 0.58rem/1 var(--mono);
+  color: var(--text-dim);
+}
+
+.sc-bar-bg {
+  height: 3px;
+  background: var(--panel-2);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-top: 3px;
+}
+
+.sc-bar-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--data);
+  transition: width 0.08s linear;
+}
+
+.sensor-card.box1 .sc-bar-fill {
+  background: var(--amber);
+}
+
 /* ── Sidebar Panels & Controls ──────────────────────────────── */
 aside {
   background: var(--panel);

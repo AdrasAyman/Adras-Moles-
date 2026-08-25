@@ -32,6 +32,8 @@ class SensorHub:
         """
         now = time.monotonic()
         idx = self.map.get(box)
+        if idx is None and (box - 1) in self.map:
+            idx = self.map.get(box - 1)
         if idx is None:
             self.bad += 1
             return
