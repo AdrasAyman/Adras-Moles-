@@ -2,7 +2,7 @@
 /* ══════════════════════════════════════════════════════════════
    MOLEFIELD — Top-Down Radar Visualizer
    Renders the physical playing field, screen plane, dead zone,
-   sensor positions, acoustic beam arcs, and solved player position.
+   both sensor boxes, acoustic beam arcs, and solved player position.
    ══════════════════════════════════════════════════════════════ */
 
 function drawRadar() {
@@ -62,6 +62,24 @@ function drawRadar() {
   rctx.textAlign = "left";
   rctx.font = "500 8px 'JetBrains Mono',monospace";
   rctx.fillText("50 cm mount limit", ox + 3, my - 3);
+
+  // ── Box Enclosures (Box 1 left, Box 2 right) ──
+  BOXES.forEach(b => {
+    const xs = b.idx.map(i => Tracker.sensors[i].x);
+    const ys = b.idx.map(i => Tracker.sensors[i].y);
+    const [xa, ya] = P(Math.min(...xs), Math.min(...ys));
+    const [xb] = P(Math.max(...xs), 0);
+
+    const alive = b.idx.some(i => Tracker.ranges[i] != null);
+    rctx.strokeStyle = alive ? "rgba(69,208,232,.45)" : "rgba(124,138,153,.35)";
+    rctx.lineWidth = 1;
+    rctx.strokeRect(xa - 11, ya - 10, (xb - xa) + 22, 20);
+
+    rctx.fillStyle = alive ? "rgba(69,208,232,.85)" : "rgba(124,138,153,.8)";
+    rctx.font = "700 8px 'JetBrains Mono',monospace";
+    rctx.textAlign = "center";
+    rctx.fillText(b.label, (xa + xb) / 2.0, ya - 14);
+  });
 
   // ── Sensor Range Arcs & Cones ──
   Tracker.sensors.forEach((sen, i) => {

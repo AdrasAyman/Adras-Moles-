@@ -243,6 +243,91 @@ aside {
   font-variant-numeric: tabular-nums;
 }
 
+/* ── Sensor Reading Group Headers (Box 1 / Box 2) ────────────── */
+.sgroup {
+  font: 600 0.55rem/1 var(--mono);
+  letter-spacing: 0.14em;
+  color: var(--text-dim);
+  margin-top: 0.15rem;
+}
+
+.sgroup:first-child {
+  margin-top: 0;
+}
+
+/* ── Sensor Layout Panel — two boxes, two sensors each ───────── */
+.boxgrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+}
+
+.boxcard {
+  background: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  padding: 0.45rem 0.5rem;
+}
+
+.boxcard.live {
+  border-color: rgba(69, 208, 232, 0.45);
+}
+
+.boxhead {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-bottom: 0.35rem;
+  padding-bottom: 0.3rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.bdot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--line);
+  flex: none;
+}
+
+.bdot.ok {
+  background: var(--data);
+  box-shadow: 0 0 6px var(--data);
+}
+
+.bname {
+  font: 600 0.6rem/1 var(--mono);
+  letter-spacing: 0.08em;
+  color: var(--text);
+}
+
+.bside {
+  margin-left: auto;
+  font: 500 0.52rem/1 var(--mono);
+  letter-spacing: 0.1em;
+  color: var(--text-dim);
+}
+
+.boxrow {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font: 500 0.66rem/1.7 var(--mono);
+}
+
+.bslot {
+  color: var(--text-dim);
+}
+
+.bval {
+  color: var(--data);
+  font-variant-numeric: tabular-nums;
+}
+
+.bval.off {
+  color: var(--text-dim);
+}
+
 .seg {
   display: flex;
   gap: 1px;
@@ -530,3 +615,4 @@ footer .spacer {
     transition: none !important;
   }
 }
+  

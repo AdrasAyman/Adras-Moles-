@@ -112,8 +112,6 @@
           <div class="readout"><span>Position</span><span id="roPos">—</span></div>
           <div class="readout"><span>Depth from wall</span><span id="roDepth">—</span></div>
           <div class="readout"><span>Sensors returning</span><span id="roN">0 / 4</span></div>
-          <div class="readout"><span>Fit residual</span><span id="roRes">—</span></div>
-          <div class="readout"><span>Update rate</span><span id="roHz">— Hz</span></div>
         </div>
 
         <div class="sec">
@@ -125,7 +123,6 @@
           <h2>Position source</h2>
           <div class="seg" role="group">
             <button data-src="mouse" aria-pressed="true">MOUSE</button>
-            <button data-src="sim" aria-pressed="false">SIMULATED</button>
             <button data-src="live" aria-pressed="false">LIVE</button>
           </div>
           <p class="hint" id="srcHint" style="margin-top:0.5rem"></p>
@@ -138,33 +135,17 @@
         <div class="sec">
           <h2>Sensor model</h2>
           <div class="field">
-            <label>Range noise σ <b id="vNoise">8 mm</b></label>
-            <input type="range" id="sNoise" min="0" max="60" value="8">
-          </div>
-          <div class="field">
-            <label>Dropout rate <b id="vDrop">3 %</b></label>
-            <input type="range" id="sDrop" min="0" max="40" value="3">
-          </div>
-          <div class="field">
             <label>Beam half-angle <b id="vBeam">30°</b></label>
             <input type="range" id="sBeam" min="10" max="60" value="30">
           </div>
-          <div class="field">
-            <label>Smoothing α <b id="vAlpha">0.35</b></label>
-            <input type="range" id="sAlpha" min="5" max="100" value="35">
-          </div>
           <p class="hint" style="margin-top:0.5rem">
-            Lower α = smoother but laggier. This is the trade-off you'll be asked to defend at the design review.
+            How wide each cone sees. Narrow beams cut cross-talk between the two boxes; wide beams keep the near corners covered. This is the trade-off you'll be asked to defend at the design review.
           </p>
         </div>
 
         <div class="sec">
           <h2>Sensor layout</h2>
-          <div class="seg" role="group">
-            <button data-lay="4lin" aria-pressed="true">4 IN LINE</button>
-            <button data-lay="2box" aria-pressed="false">2 BOXES</button>
-            <button data-lay="4wide" aria-pressed="false">4 SPLAYED</button>
-          </div>
+          <div id="boxLayout" class="boxgrid"></div>
           <p class="hint" style="margin-top:0.5rem" id="layHint"></p>
         </div>
 
@@ -182,7 +163,7 @@
   "t": 184213,
   "ranges": [1420, 1655] }</pre>
             <p class="hint">
-              Box order must match the sensor layout selected above. Frames older than 400 ms are treated as stale.
+              Box 1 is the left-hand box (slots S0, S1) and Box 2 is the right-hand box (slots S2, S3). Within each box, <code>S1</code> is the outer sensor and <code>S2</code> the inner, splayed one. Frames older than 400 ms are treated as stale.
             </p>
           </details>
         </div>

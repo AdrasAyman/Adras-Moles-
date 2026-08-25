@@ -1,8 +1,8 @@
 "use strict";
 /* ══════════════════════════════════════════════════════════════
    MOLEFIELD — Application Controller & Loop
-   Coordinates user input, UI HUD updates, URL bootstrapping,
-   dead-zone supervision, and the main animation loop.
+     BOX 1 (left)  → S0, S1
+     BOX 2 (right) → S2, S3
    ══════════════════════════════════════════════════════════════ */
 
 const $ = s => document.querySelector(s);
@@ -23,31 +23,88 @@ function fitStageIfNeeded() {
 function buildSensorRows() {
   const list = $("#sensorList");
   if (!list) return;
-  list.innerHTML = Tracker.sensors.map((sen, i) => {
-    const box = Math.floor(i / 2) + 1;
-    const slot = (i % 2) + 1;
-    return `
+  list.innerHTML = BOXES.map(b => {
+    const rows = b.idx.map(i => {
+      const sen = Tracker.sensors[i];
+      return `
       <div class="sensrow" data-i="${i}">
         <span class="sdot"></span>
-        <span class="slabel">S${i}<small>Box ${box} · S${slot}</small></span>
+        <span class="slabel">S${i}<small>Box ${b.id} · S${sen.slot}</small></span>
         <span class="sbar"><i></i></span>
         <span class="sval">—</span>
+      </div>`;
+    }).join("");
+    return `<div class="sgroup">${b.label} · ${b.side}</div>${rows}`;
+  }).join("");
+}
+
+function buildLayoutPanel() {
+  const wrap = $("#boxLayout");
+  if (!wrap) return;
+  wrap.innerHTML = BOXES.map(b => {
+    const rows = b.idx.map(i => {
+      const sen = Tracker.sensors[i];
+      return `
+        <div class="boxrow" data-i="${i}">
+          <span class="bslot">S${sen.slot}</span>
+          <span class="bval">—</span>
+        </div>`;
+    }).join("");
+    return `
+      <div class="boxcard" data-box="${b.id}">
+        <div class="boxhead">
+          <span class="bdot"></span>
+          <span class="bname">${b.label}</span>
+          <span class="bside">${b.side}</span>
+        </div>
+        ${rows}
       </div>`;
   }).join("");
 }
 
 const SENSOR_BAR_MAX_M = 3.0;
 
+// Only redraw a number once it has genuinely moved by 1.5 cm.
+const DISPLAY_DEADBAND_M = 0.015;
+const shownRange = [];
+
+function displayRange(i, r) {
+  if (r == null) { shownRange[i] = null; return "—"; }
+  if (shownRange[i] == null || Math.abs(r - shownRange[i]) >= DISPLAY_DEADBAND_M) {
+    shownRange[i] = r;
+  }
+  return `${shownRange[i].toFixed(2)} m`;
+}
+
 function updateSensorReadings() {
   document.querySelectorAll("#sensorList .sensrow").forEach(row => {
-    const r = Tracker.ranges[+row.dataset.i];
+    const i = +row.dataset.i;
+    const r = Tracker.ranges[i];
     const has = r != null;
     const dot = row.querySelector(".sdot");
     const bar = row.querySelector(".sbar i");
     const val = row.querySelector(".sval");
     if (dot) dot.classList.toggle("ok", has);
     if (bar) bar.style.width = has ? `${Math.min(100, (r / SENSOR_BAR_MAX_M) * 100.0).toFixed(0)}%` : "0%";
-    if (val) val.textContent = has ? `${r.toFixed(2)} m` : "—";
+    if (val) val.textContent = displayRange(i, r);
+  });
+
+  document.querySelectorAll("#boxLayout .boxrow").forEach(row => {
+    const i = +row.dataset.i;
+    const r = Tracker.ranges[i];
+    const val = row.querySelector(".bval");
+    if (val) {
+      val.textContent = displayRange(i, r);
+      val.classList.toggle("off", r == null);
+    }
+  });
+
+  document.querySelectorAll("#boxLayout .boxcard").forEach(card => {
+    const box = BOXES.find(b => b.id === +card.dataset.box);
+    const alive = box ? box.idx.some(i => Tracker.ranges[i] != null) : false;
+    const dot = card.querySelector(".bdot");
+    if (dot) dot.classList.toggle("ok", alive);
+    card.classList.toggle("live", alive);
   });
 }
 
@@ -77,14 +134,10 @@ function updateHUD() {
   const roPos = $("#roPos");
   const roDepth = $("#roDepth");
   const roN = $("#roN");
-  const roRes = $("#roRes");
-  const roHz = $("#roHz");
 
-  if (roPos) roPos.textContent = p ? `${p.x.toFixed(3)}, ${p.y.toFixed(3)} m` : "—";
+  if (roPos) roPos.textContent = p ? `${p.x.toFixed(2)}, ${p.y.toFixed(2)} m` : "—";
   if (roDepth) roDepth.textContent = p ? `${p.y.toFixed(2)} m` : "—";
   if (roN) roN.textContent = `${Tracker.nSensors} / ${Tracker.sensors.length}`;
-  if (roRes) roRes.textContent = Tracker.src === "mouse" ? "n/a" : `${(Tracker.res * 1000.0).toFixed(0)} mm`;
-  if (roHz) roHz.textContent = Tracker.hz.toFixed(0) + " Hz";
 
   const dot = $("#stDot");
   const txt = $("#stText");
@@ -121,7 +174,6 @@ function mainLoop(now) {
       endRun("Time");
     }
 
-    // Dead-zone supervision — independent of game state
     const inDead = Tracker.pos && Tracker.pos.y < AREA.yNear && !Tracker.stale;
     if (inDead !== G.alarm) {
       G.alarm = inDead;
@@ -130,7 +182,6 @@ function mainLoop(now) {
       else Audio_.alarmOff();
     }
 
-    // Update active moles
     for (const m of G.moles) {
       m.age += dt;
       if (m.state === "rise") {
@@ -153,10 +204,9 @@ function mainLoop(now) {
       }
     }
 
-    // Dwell-to-whack detection
     if (Tracker.pos && !G.alarm && !Tracker.stale) {
       let target = null, bestD = Infinity;
-      const grab = 0.17; // Metres: body centre must be within 17 cm of hole
+      const grab = 0.17;
       for (const m of G.moles) {
         if (m.dead || m.state === "sink") continue;
         const d = Math.hypot(Tracker.pos.x - m.hole.x, Tracker.pos.y - m.hole.y);
@@ -185,7 +235,6 @@ function mainLoop(now) {
     if (liveCount < L.max && Math.random() < dt * 2.2) spawn();
     if (liveCount === 0 && G.moles.length === 0) spawn();
 
-    // Particle / score effect bursts
     for (const f of G.fx) f.t += dt;
     G.fx = G.fx.filter(f => f.t < 0.6);
   } else if (G.alarm) {
@@ -201,7 +250,6 @@ function mainLoop(now) {
   requestAnimationFrame(mainLoop);
 }
 
-// ── DOM Event Setup ──────────────────────────────────────────────────────────
 function initApp() {
   const stage = $("#stage");
   if (stage) {
@@ -247,7 +295,6 @@ function initApp() {
   if (btnAgain) btnAgain.onclick = () => { hideAllOverlays(); resetRun(); };
   if (btnResume) btnResume.onclick = () => { hideAllOverlays(); G.phase = "play"; };
 
-  // Source segmented buttons (Mouse / Sim / Live)
   document.querySelectorAll("[data-src]").forEach(b => {
     b.onclick = () => {
       document.querySelectorAll("[data-src]").forEach(o => o.setAttribute("aria-pressed", o === b));
@@ -261,19 +308,6 @@ function initApp() {
     };
   });
 
-  // Layout segmented buttons (4lin / 2box / 4wide)
-  document.querySelectorAll("[data-lay]").forEach(b => {
-    b.onclick = () => {
-      document.querySelectorAll("[data-lay]").forEach(o => o.setAttribute("aria-pressed", o === b));
-      Tracker.layout = b.dataset.lay;
-      Tracker.live.ranges = [];
-      const hint = $("#layHint");
-      if (hint) hint.textContent = LAYOUTS[Tracker.layout].hint;
-      buildSensorRows();
-    };
-  });
-
-  // ── Setup Wizard (connect / reconnect ESP32 boxes) ──────────────────────────
   const setupConnect = $("#setupConnect");
   if (setupConnect) setupConnect.onclick = () => Setup.connect();
 
@@ -294,7 +328,6 @@ function initApp() {
     };
   }
 
-  // Simulation Sliders
   const bindSlider = (id, out, fn, fmt) => {
     const el = $(id);
     const outEl = $(out);
@@ -307,19 +340,10 @@ function initApp() {
     apply();
   };
 
-  bindSlider("#sNoise", "#vNoise", v => (Sim.noise = v / 1000.0), v => v + " mm");
-  bindSlider("#sDrop", "#vDrop", v => (Sim.drop = v / 100.0), v => v + " %");
   bindSlider("#sBeam", "#vBeam", v => (Sim.beam = v), v => v + "°");
-  bindSlider("#sAlpha", "#vAlpha", v => (Tracker.alpha = v / 100.0), v => (v / 100.0).toFixed(2));
 
-  // ── URL Bootstrapper ───────────────────────────────────────────────────────
   (function bootFromUrl() {
     const q = new URLSearchParams(location.search);
-    const lay = q.get("layout");
-    if (lay && LAYOUTS[lay]) {
-      const b = document.querySelector(`[data-lay="${lay}"]`);
-      if (b) b.click();
-    }
 
     const wsPort = q.get("ws");
     const wsUrlInput = $("#wsUrl");
@@ -328,10 +352,9 @@ function initApp() {
       wsUrlInput.value = url;
     }
 
-    const src = q.get("src");
-    if (src === "live" || src === "sim") {
-      const b = document.querySelector(`[data-src="${src}"]`);
-      if (b) b.click(); // "live" click already opens the setup wizard and connects
+    if (q.get("src") === "live") {
+      const b = document.querySelector('[data-src="live"]');
+      if (b) b.click();
     }
   })();
 
@@ -341,6 +364,7 @@ function initApp() {
   if (layHint) layHint.textContent = LAYOUTS[Tracker.layout].hint;
 
   buildSensorRows();
+  buildLayoutPanel();
   buildHoles();
   fitStage();
   window.addEventListener("resize", fitStage);
