@@ -6,13 +6,13 @@
  * For more detail (instruction and wiring diagram), visit https://esp32io.com/tutorials/esp32-ultrasonic-sensor
  */
 
-#define TRIG_PIN_1 33 // ESP32 pin GPIO33 connected to Ultrasonic Sensor's TRIG pin
-#define ECHO_PIN_1 32 // ESP32 pin GPIO32 connected to Ultrasonic Sensor's ECHO pin
-#define TRIG_PIN_2 27 // ESP32 pin GPIO27 connected to Ultrasonic Sensor's TRIG pin
-#define ECHO_PIN_2 26 // ESP32 pin GPIO26 connected to Ultrasonic Sensor's ECHO pin
+#define TRIG_PIN_1 32 // ESP32 pin GPIO33 connected to Ultrasonic Sensor's TRIG pin
+#define ECHO_PIN_1 35 // ESP32 pin GPIO32 connected to Ultrasonic Sensor's ECHO pin
+#define TRIG_PIN_2 26 // ESP32 pin GPIO27 connected to Ultrasonic Sensor's TRIG pin
+#define ECHO_PIN_2 27 // ESP32 pin GPIO26 connected to Ultrasonic Sensor's ECHO pin
 
-float duration_us, distance_cm;
-float duration_us_2, distance_cm_2;
+int duration_us, distance_cm;
+int duration_us_2, distance_cm_2;
 
 void setup() {
   // begin serial port
@@ -52,11 +52,10 @@ void loop() {
   // print the value to Serial Monitor
   Serial.print("distance1: ");
   Serial.print(distance_cm);
-  Serial.println(" cm" );  
-// Serial.print("distance2: ");
-// Serial.print(distance_cm_2);
-// Serial.println(" cm");
+  Serial.print("\t" );  
+  Serial.print("distance2: ");
+  Serial.print(distance_cm_2);
+  Serial.println(" cm");
 
-
-  delay(500);
+  delay(100);
 }
