@@ -27,41 +27,40 @@ const LAYOUTS = {
     name: "4 IN LINE",
     hint: "Two boxes, two sensors each, evenly spread in a straight line across the wall.",
     s: [
-      { x: 0.19, y: 0.30, a: 0 },
-      { x: 0.56, y: 0.30, a: 0 },
-      { x: 0.94, y: 0.30, a: 0 },
-      { x: 1.31, y: 0.30, a: 0 }
+      { x: 0.19, y: 0.30, a: 0, box: 1, slot: 1 },
+      { x: 0.56, y: 0.30, a: 0, box: 1, slot: 2 },
+      { x: 0.94, y: 0.30, a: 0, box: 2, slot: 1 },
+      { x: 1.31, y: 0.30, a: 0, box: 2, slot: 2 }
     ]
   },
   "2box4s": {
     name: "2 CORNER BOXES (4 SENSORS)",
     hint: "Box 0 on left, Box 1 on right. Sensor 0/2 faces 45° into the table, and Sensor 1/3 faces the wall along the edge (±90°).",
     s: [
-      { x: 0.00, y: 0.30, a: 45.0 },
-      { x: 0.00, y: 0.30, a: -90.0 },
-      { x: 1.50, y: 0.30, a: 90.0 },
-      { x: 1.50, y: 0.30, a: -45.0 }
-    ]
-  },
-  "2box": {
-    name: "2 BOXES (2 SENSORS)",
-    hint: "One sensor per box at the outer edges. Cheapest build; the far centre gets thin and the fit goes soft.",
-    s: [
-      { x: 0.10, y: 0.30, a: 14 },
-      { x: 1.40, y: 0.30, a: -14 }
+      { x: 0.00, y: 0.30, a: 45.0, box: 1, slot: 1 },
+      { x: 0.00, y: 0.30, a: -90.0, box: 1, slot: 2 },
+      { x: 1.50, y: 0.30, a: 90.0, box: 2, slot: 1 },
+      { x: 1.50, y: 0.30, a: -45.0, box: 2, slot: 2 }
     ]
   },
   "4wide": {
     name: "4 SPLAYED",
     hint: "Outer pair splayed toward the middle. Wider usable footprint, but the beams overlap.",
     s: [
-      { x: 0.06, y: 0.30, a: 26 },
-      { x: 0.52, y: 0.30, a: 6 },
-      { x: 0.98, y: 0.30, a: -6 },
-      { x: 1.44, y: 0.30, a: -26 }
+      { x: 0.06, y: 0.30, a: 26, box: 1, slot: 1 },
+      { x: 0.52, y: 0.30, a: 6, box: 1, slot: 2 },
+      { x: 0.98, y: 0.30, a: -6, box: 2, slot: 1 },
+      { x: 1.44, y: 0.30, a: -26, box: 2, slot: 2 }
     ]
   }
 };
+
+LAYOUTS["2box"] = LAYOUTS["2box4s"];
+
+const BOXES = [
+  { id: 1, label: "BOX 1", side: "LEFT",  idx: [0, 1] },
+  { id: 2, label: "BOX 2", side: "RIGHT", idx: [2, 3] }
+];
 
 const LEVELS = [
   {
