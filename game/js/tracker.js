@@ -19,7 +19,8 @@ const Tracker = {
   frames: 0,
   hzT: 0,
   stale: false,
-  layout: "4lin",
+  wsState: "closed",
+  layout: "2box4s",
 
   get sensors() {
     return LAYOUTS[this.layout].s;
@@ -34,6 +35,7 @@ const Tracker = {
   live: {
     ws: null,
     ranges: [],
+    boxes: [],
     t: 0
   },
 
@@ -84,7 +86,7 @@ const Tracker = {
       } else {
          this.history = [{ x: measured.x, y: measured.y }];
       }
-      
+
       let medX = measured.x, medY = measured.y;
       if (this.history.length > 0) {
         const sortedX = [...this.history].sort((a, b) => a.x - b.x);
@@ -95,25 +97,25 @@ const Tracker = {
       }
 
       const a = this.src === "mouse" ? 1.0 : this.alpha;
-      const b = (a * a) / (2.0 - a); 
-      
+      const b = (a * a) / (2.0 - a);
+
       if (!this.pos) {
         this.pos = { x: medX, y: medY, vx: 0, vy: 0 };
       } else {
         // 2. Predict next state based on current velocity
         let px = this.pos.x + (this.pos.vx || 0) * dt;
         let py = this.pos.y + (this.pos.vy || 0) * dt;
-        
+
         // Calculate residual (error between predicted and median measured)
         let rx = medX - px;
         let ry = medY - py;
-        
+
         // 3. Strict Kinematic Speed Thresholding (V_MAX)
         // Max human sideways movement ~ 4.0 meters per second
-        const V_MAX = 4.0; 
+        const V_MAX = 4.0;
         const maxJump = V_MAX * dt;
         const jumpDist = Math.hypot(rx, ry);
-        
+
         if (this.src !== "mouse" && jumpDist > maxJump) {
              rx = (rx / jumpDist) * maxJump;
              ry = (ry / jumpDist) * maxJump;
@@ -125,7 +127,7 @@ const Tracker = {
         this.pos.y = py + a * ry;
         this.pos.vx = (this.pos.vx || 0) + (b / safeDt) * rx;
         this.pos.vy = (this.pos.vy || 0) + (b / safeDt) * ry;
-        
+
         // Apply friction
         this.pos.vx *= 0.85;
         this.pos.vy *= 0.85;
@@ -146,6 +148,7 @@ const Tracker = {
       if (this.live.ws) this.live.ws.close();
     } catch (e) {}
 
+    this.wsState = "connecting";
     const wsStateEl = document.getElementById("wsState");
     if (wsStateEl) wsStateEl.textContent = "connecting";
 
@@ -153,12 +156,15 @@ const Tracker = {
     this.live.ws = ws;
 
     ws.onopen = () => {
+      this.wsState = "open";
       if (wsStateEl) wsStateEl.textContent = "open";
     };
     ws.onclose = () => {
+      this.wsState = "closed";
       if (wsStateEl) wsStateEl.textContent = "closed";
     };
     ws.onerror = () => {
+      this.wsState = "error";
       if (wsStateEl) wsStateEl.textContent = "error";
     };
     ws.onmessage = ev => {
@@ -186,6 +192,9 @@ const Tracker = {
           out[m.id] = m.mm == null ? null : m.mm / 1000.0;
           this.live.ranges = out;
         }
+        // Per-box health from bridge/pipeline.py — the setup wizard needs this
+        if (Array.isArray(m.boxes)) this.live.boxes = m.boxes;
+
         this.live.t = performance.now();
       } catch (e) {}
     };
