@@ -375,7 +375,7 @@ function initApp() {
     apply();
   };
 
-  bindSlider("#sBeam", "#vBeam", v => (Sim.beam = v), v => v + "°");
+  
 
   (function bootFromUrl() {
     const q = new URLSearchParams(location.search);
