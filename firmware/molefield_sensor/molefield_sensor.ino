@@ -35,18 +35,23 @@
 /* ── Per-Box Configuration ──────────────────────────────────────────────── */
 #define BOX_ID            0            // 0 or 1 — MUST differ between physical boxes
 
-const char* WIFI_SSID   = "MOLEFIELD";
-const char* WIFI_PASS   = "whackamole";
+// Networking Mode:
+// true  = Standalone AP mode (Box 0 creates Wi-Fi "Dylan&CO.", Box 1 & PC join it)
+// false = External router mode (Both boxes connect to an existing Wi-Fi router)
+#define STANDALONE_AP     true
+
+const char* WIFI_SSID   = "Molefield";
+const char* WIFI_PASS   = "molefield123";
 
 const uint16_t UDP_TX_PORT   = 4210;   // Outbound telemetry datagrams to PC bridge
 const uint16_t UDP_SYNC_PORT = 4211;   // Inbound slot sync beacon from PC bridge
 const bool     USE_BROADCAST = true;   // false -> send unicast to BRIDGE_IP
 IPAddress      BRIDGE_IP(192, 168, 4, 2);
 
-/* ── Hardware Pinout ────────────────────────────────────────────────────── */
+/* ── Hardware Pinout (HC-SR04 / RCWL-1601) ──────────────────────────────── */
 const uint8_t  N_SENSORS = 2;
-const uint8_t  TRIG_PINS[N_SENSORS] = { 25, 27 };
-const uint8_t  ECHO_PINS[N_SENSORS] = { 26, 14 };
+const uint8_t  TRIG_PINS[N_SENSORS] = { 32, 26 };  // Sensor 1: GPIO 32, Sensor 2: GPIO 26
+const uint8_t  ECHO_PINS[N_SENSORS] = { 35, 27 };  // Sensor 1: GPIO 35, Sensor 2: GPIO 27
 
 /* ── Timing & Acoustic Constants ────────────────────────────────────────── */
 const uint16_t SLOT_MS         = 16;    // Time window allocated per sensor (ms)
@@ -77,11 +82,15 @@ long pingSensor(uint8_t i) {
   long mm = (long)(us * SPEED_OF_SOUND / 2.0f);
   if (mm < 40 || mm > 4000) return -1; // Outside honest sensor operating window
 
-  /* Spike Guard: A single reading jumping > 500 mm is typically cross-talk
-     or acoustic multipath bounce. Reject once, then accept if confirmed. */
+  /* Spike Guard: A single reading jumping > 500 mm is typically cross-talk. Reject once. */
   if (lastRange[i] != 0 && labs(mm - (long)lastRange[i]) > 500) {
     lastRange[i] = mm;
     return -1;
+  }
+  
+  // Apply a light Exponential Moving Average (EMA) to smooth out natural ultrasonic jitter
+  if (lastRange[i] != 0) {
+    mm = (mm * 3 + lastRange[i] * 7) / 10; // 30% new, 70% old
   }
   lastRange[i] = mm;
   return mm;
@@ -125,6 +134,28 @@ void runCycle() {
   udpTx.beginPacket(dest, UDP_TX_PORT);
   udpTx.print(packet);
   udpTx.endPacket();
+
+  // Also broadcast to SoftAP subnet in standalone mode
+#if STANDALONE_AP
+  udpTx.beginPacket(IPAddress(192, 168, 4, 255), UDP_TX_PORT);
+  udpTx.print(packet);
+  udpTx.endPacket();
+#endif
+
+  // Periodic Serial debug output matching electrical team's format
+  static unsigned long lastSerialPrint = 0;
+  if (millis() - lastSerialPrint >= 100) {
+    lastSerialPrint = millis();
+    long dist1_cm = (mm[0] > 0) ? mm[0] / 10 : -1;
+    long dist2_cm = (mm[1] > 0) ? mm[1] / 10 : -1;
+    
+    Serial.print("distance1: ");
+    Serial.print(dist1_cm);
+    Serial.print("\t");
+    Serial.print("distance2: ");
+    Serial.print(dist2_cm);
+    Serial.println(" cm");
+  }
 }
 
 /* ── Setup & Main Loop ──────────────────────────────────────────────────── */
@@ -140,6 +171,37 @@ void setup() {
     analogSetPinAttenuation(VBAT_PIN, ADC_11db);
   }
 
+#if STANDALONE_AP
+  #if BOX_ID == 0
+  // ── Box 0: Broadcasts the standalone Wi-Fi Access Point ──
+  WiFi.mode(WIFI_AP_STA);
+  WiFi.softAP(WIFI_SSID, WIFI_PASS);
+  Serial.printf("\n========================================\n");
+  Serial.printf("Sensor Box 0 created Wi-Fi AP '%s'\n", WIFI_SSID);
+  Serial.printf("AP IP address: %s\n", WiFi.softAPIP().toString().c_str());
+  Serial.printf("Connect your Laptop to '%s' (Pass: '%s')\n", WIFI_SSID, WIFI_PASS);
+  Serial.printf("========================================\n");
+  #else
+  // ── Box 1: Connects to Box 0's Wi-Fi Access Point ──
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(WIFI_SSID, WIFI_PASS);
+  Serial.printf("\nSensor Box %d connecting to AP '%s'...", BOX_ID, WIFI_SSID);
+  int attempts = 0;
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(300);
+    Serial.print(".");
+    attempts++;
+    if (attempts % 30 == 0) {
+      Serial.printf("\nStill trying to connect to '%s'...\n", WIFI_SSID);
+    }
+  }
+  Serial.printf("\n========================================\n");
+  Serial.printf("Sensor Box %d connected to AP!\n", BOX_ID);
+  Serial.printf("Assigned IP: %s\n", WiFi.localIP().toString().c_str());
+  Serial.printf("========================================\n");
+  #endif
+#else
+  // ── External Router Mode: Both boxes join existing network ──
   WiFi.mode(WIFI_STA);
   WiFi.setSleep(true);               // Modem sleep between packet bursts
   WiFi.setTxPower(WIFI_POWER_11dBm); // Sufficient across a room, conserves battery
@@ -151,29 +213,41 @@ void setup() {
     Serial.print(".");
   }
   Serial.printf("\nSensor box %d ready at IP: %s\n", BOX_ID, WiFi.localIP().toString().c_str());
+#endif
 
   udpTx.begin(0);
   udpSync.begin(UDP_SYNC_PORT);
 }
 
+unsigned long lastCycleTime = 0;
+const unsigned long FALLBACK_CYCLE_MS = 150; // Fallback timer if PC sync beacon is lost
+
 void loop() {
+  // Check for PC synchronization beacon
   int sz = udpSync.parsePacket();
-  if (sz <= 0) {
-    delay(1);
-    return;
+  if (sz > 0) {
+    char buf[64];
+    int len = udpSync.read(buf, sizeof(buf) - 1);
+    if (len > 0) {
+      buf[len] = 0;
+      char* p = strstr(buf, "\"sync\":");
+      if (p) {
+        uint16_t seq = (uint16_t)atoi(p + 7);
+        if (seq != lastSeq) {
+          lastSeq = seq;
+          lastCycleTime = millis();
+          runCycle();
+          return;
+        }
+      }
+    }
   }
 
-  char buf[64];
-  int len = udpSync.read(buf, sizeof(buf) - 1);
-  if (len <= 0) return;
-  buf[len] = 0;
+  // Fallback: If no sync beacon arrives from PC within 65ms, ping autonomously
+  if (millis() - lastCycleTime >= FALLBACK_CYCLE_MS) {
+    lastCycleTime = millis();
+    runCycle();
+  }
 
-  // Beacon format: {"sync":1234}
-  char* p = strstr(buf, "\"sync\":");
-  if (!p) return;
-  uint16_t seq = (uint16_t)atoi(p + 7);
-  if (seq == lastSeq) return;
-  lastSeq = seq;
-
-  runCycle();
+  delay(1);
 }

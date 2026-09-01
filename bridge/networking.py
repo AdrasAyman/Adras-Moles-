@@ -14,30 +14,6 @@ from bridge.hub import SensorHub
 from bridge.simulator import Walker
 
 
-def parse_frame(payload: str) -> tuple[int, list[float | None]]:
-    """
-    Parses one inbound sensor datagram. Accepts either the JSON range-frame
-    format (`{"box":0,"ranges":[1420,1655]}`, millimetres) produced by
-    firmware/molefield_sensor.ino, or the plain-text format
-    (`Box:1,S1:120.5,S2:115.2`, centimetres, -1 = no echo) currently sent by
-    the deployed ESP32 test firmware in esp_test_files/ESP_code.
-
-    Text-format box IDs are 1-indexed on the hardware; they are normalised
-    to 0-indexed here so both formats share the same box map.
-    """
-    payload = payload.strip()
-    if payload.startswith("{"):
-        msg = json.loads(payload)
-        return int(msg.get("box", 0)), list(msg.get("ranges", []))
-
-    fields = [p.split(":") for p in payload.split(",")]
-    box = int(fields[0][1]) - 1
-    ranges_mm: list[float | None] = [
-        None if float(v) <= 0 else float(v) * 10.0 for _, v in fields[1:]
-    ]
-    return box, ranges_mm
-
-
 def udp_listener(
     hub: SensorHub,
     port: int,
@@ -46,7 +22,7 @@ def udp_listener(
 ):
     """
     Listens for incoming UDP datagrams containing ultrasonic ranges from ESP32 boxes.
-    See `parse_frame` for the accepted wire formats.
+    Expected datagram format: {"box": 0, "t": 184213, "ranges": [1420, 1655]}
     """
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -62,11 +38,36 @@ def udp_listener(
         except OSError:
             break
 
+        text = data.decode("utf-8", "replace").strip()
         try:
-            box, ranges_mm = parse_frame(data.decode("utf-8", "replace"))
-            hub.ingest(box=box, ranges_mm=ranges_mm, sender=addr[0])
-        except (ValueError, TypeError, IndexError):
-            hub.bad += 1
+            msg = json.loads(text)
+            hub.ingest(
+                box=int(msg.get("box", 0)),
+                ranges_mm=list(msg.get("ranges", [])),
+                sender=addr[0],
+            )
+        except (ValueError, TypeError):
+            # Fallback parser for string payloads like "Box:1,S1:105.2,S2:98.4"
+            if text.startswith("Box:"):
+                try:
+                    parts = text.split(",")
+                    box_id = int(parts[0].split(":")[1])
+                    # If 1-indexed (Box:1, Box:2), map to 0-indexed (0, 1)
+                    if box_id in (1, 2) and 0 not in hub.map and 1 in hub.map:
+                        norm_box = box_id - 1
+                    else:
+                        norm_box = box_id
+                    
+                    ranges = []
+                    for p in parts[1:]:
+                        if ":" in p:
+                            val_cm = float(p.split(":")[1])
+                            ranges.append(round(val_cm * 10.0) if val_cm > 0 else None)
+                    hub.ingest(box=norm_box, ranges_mm=ranges, sender=addr[0])
+                except Exception:
+                    hub.bad += 1
+            else:
+                hub.bad += 1
 
     sock.close()
 

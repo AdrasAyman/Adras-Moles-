@@ -156,6 +156,41 @@ function updateHUD() {
       txt.textContent = "Waiting for a body in the play area";
     }
   }
+
+  // ── Live Individual 4-Sensor Readouts (Prototype Window) ──
+  const maxRangeM = 2.50;
+  for (let i = 0; i < 4; i++) {
+    const r = Tracker.ranges[i];
+    const sv = $(`#sv${i}`);
+    const ss = $(`#ss${i}`);
+    const sb = $(`#sb${i}`);
+    const sc = $(`#sc${i}`);
+    const ssc = $(`#ssc${i}`);
+    const ssv = $(`#ssv${i}`);
+
+    if (r != null && !isNaN(r)) {
+      const cm = (r * 100.0).toFixed(1);
+      const mm = (r * 1000.0).toFixed(0);
+      const pct = Math.min(100, Math.max(4, (r / maxRangeM) * 100.0));
+
+      if (sv) sv.textContent = `${cm} cm`;
+      if (ss) ss.textContent = `${mm} mm`;
+      if (sb) sb.style.width = `${pct}%`;
+      if (sc) {
+        sc.classList.add("active");
+        if (i >= 2) sc.classList.add("box1");
+      }
+      if (ssv) ssv.textContent = `${cm} cm`;
+      if (ssc) ssc.classList.add("active");
+    } else {
+      if (sv) sv.textContent = "—";
+      if (ss) ss.textContent = "No echo";
+      if (sb) sb.style.width = "0%";
+      if (sc) sc.classList.remove("active");
+      if (ssv) ssv.textContent = "—";
+      if (ssc) ssc.classList.remove("active");
+    }
+  }
 }
 
 function mainLoop(now) {

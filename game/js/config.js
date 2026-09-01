@@ -1,54 +1,143 @@
 "use strict";
 /* ══════════════════════════════════════════════════════════════
    MOLEFIELD — Game Configuration & Physical Constants
+   ENGG3000 SPINE · Full-Body Whack-a-Mole
 
-   HARDWARE LAYOUT (fixed — 2 boxes, 2 sensors each):
-     BOX 1  → FAR LEFT  edge → S0 (down-field) , S1 (across-field)
-     BOX 2  → FAR RIGHT edge → S2 (down-field) , S3 (across-field)
+   Coordinate system (all metres, physical):
+     x : 0 .. 1.50   left -> right across the wall
+     y : 0            at the wall/screen plane
+         0 .. 0.60    DEAD ZONE (visual & audio alarm)
+         0.60 .. 2.00 PLAY AREA (1.40 m active depth)
+     Sensor boxes sit at y <= 0.50 (inside the dead zone strip,
+     never inside the play area) as the brief requires.
    ══════════════════════════════════════════════════════════════ */
 
 const AREA = {
-  w: 1.50,
-  deep: 1.40,
-  dead: 0.60,
-  yNear: 0.60,
-  yFar: 2.00,
-  yVisTop: 0.20,
-  bodyR: 0.20
+  w: 1.50,           // Play area width in metres
+  deep: 1.40,        // Play area depth in metres
+  dead: 0.60,        // Dead zone depth from screen plane
+  yNear: 0.60,       // Active play area near boundary
+  yFar: 2.00,        // Active play area far boundary
+  yVisTop: 0.20,     // Top visual boundary for rendering and mouse input
+  bodyR: 0.20        // Modelled torso radius (surface to centre)
 };
 
 const LAYOUTS = {
-  "2box": {
-    name: "2 BOXES",
-    hint: "Box 1 hard against the left edge, Box 2 hard against the right, two sensors side by side in each. In every box one sensor looks down the field and the other is splayed sharply across it, so the two cones together sweep the full 1.50 x 1.40 m area.",
+  "4lin": {
+    name: "4 IN LINE",
+    hint: "Two boxes, two sensors each, evenly spread in a straight line across the wall.",
     s: [
-      { x: 0.04, y: 0.30, a:  17, box: 1, slot: 1 },
-      { x: 0.11, y: 0.30, a:  54, box: 1, slot: 2 },
-      { x: 1.46, y: 0.30, a: -17, box: 2, slot: 1 },
-      { x: 1.39, y: 0.30, a: -54, box: 2, slot: 2 }
+      { x: 0.19, y: 0.30, a: 0 },
+      { x: 0.56, y: 0.30, a: 0 },
+      { x: 0.94, y: 0.30, a: 0 },
+      { x: 1.31, y: 0.30, a: 0 }
+    ]
+  },
+  "2box4s": {
+    name: "2 CORNER BOXES (4 SENSORS)",
+    hint: "Box 0 on left, Box 1 on right. Sensor 0/2 faces 45° into the table, and Sensor 1/3 faces the wall along the edge (±90°).",
+    s: [
+      { x: 0.00, y: 0.30, a: 45.0 },
+      { x: 0.00, y: 0.30, a: -90.0 },
+      { x: 1.50, y: 0.30, a: 90.0 },
+      { x: 1.50, y: 0.30, a: -45.0 }
+    ]
+  },
+  "2box": {
+    name: "2 BOXES (2 SENSORS)",
+    hint: "One sensor per box at the outer edges. Cheapest build; the far centre gets thin and the fit goes soft.",
+    s: [
+      { x: 0.10, y: 0.30, a: 14 },
+      { x: 1.40, y: 0.30, a: -14 }
+    ]
+  },
+  "4wide": {
+    name: "4 SPLAYED",
+    hint: "Outer pair splayed toward the middle. Wider usable footprint, but the beams overlap.",
+    s: [
+      { x: 0.06, y: 0.30, a: 26 },
+      { x: 0.52, y: 0.30, a: 6 },
+      { x: 0.98, y: 0.30, a: -6 },
+      { x: 1.44, y: 0.30, a: -26 }
     ]
   }
 };
 
-/* Safety net: old code may still ask for "4lin" or "4wide".
-   Point those at the same two-box layout so nothing can crash. */
-LAYOUTS["4lin"]  = LAYOUTS["2box"];
-LAYOUTS["4wide"] = LAYOUTS["2box"];
-
-const BOXES = [
-  { id: 1, label: "BOX 1", side: "LEFT",  idx: [0, 1] },
-  { id: 2, label: "BOX 2", side: "RIGHT", idx: [2, 3] }
-];
-
 const LEVELS = [
-  { n: 1, name: "Warm up",      cols: 3, rows: 2, life: 2.60, dwell: 0.50, max: 1, target: 6,  dur: 45, bombs: false, gold: false, desc: "Six holes, one mole at a time. Learn how the cursor answers your body." },
-  { n: 2, name: "Faster moles", cols: 3, rows: 2, life: 2.00, dwell: 0.45, max: 2, target: 10, dur: 45, bombs: false, gold: true,  desc: "Two moles can share the field, and gold ones are worth triple." },
-  { n: 3, name: "Wider field",  cols: 4, rows: 3, life: 1.80, dwell: 0.40, max: 2, target: 14, dur: 45, bombs: true,  gold: true,  desc: "Twelve holes now — and bombs. Sit on a bomb and you lose points and your streak." },
-  { n: 4, name: "Twitch",       cols: 4, rows: 3, life: 1.40, dwell: 0.34, max: 3, target: 18, dur: 45, bombs: true,  gold: true,  desc: "Three moles up at once. Plan the shortest path between them, don't chase." },
-  { n: 5, name: "Endurance",    cols: 5, rows: 3, life: 1.15, dwell: 0.30, max: 3, target: 24, dur: 60, bombs: true,  gold: true,  desc: "Fifteen holes, one minute, no mercy. This is the run you demo in week 13." }
+  {
+    n: 1,
+    name: "Warm up",
+    cols: 3,
+    rows: 2,
+    life: 2.6,
+    dwell: 0.50,
+    max: 1,
+    target: 6,
+    dur: 45,
+    bombs: false,
+    gold: false,
+    desc: "Six holes, one mole at a time. Learn how the cursor answers your body."
+  },
+  {
+    n: 2,
+    name: "Faster moles",
+    cols: 3,
+    rows: 2,
+    life: 2.0,
+    dwell: 0.45,
+    max: 2,
+    target: 10,
+    dur: 45,
+    bombs: false,
+    gold: true,
+    desc: "Two moles can share the field, and gold ones are worth triple."
+  },
+  {
+    n: 3,
+    name: "Wider field",
+    cols: 4,
+    rows: 3,
+    life: 1.8,
+    dwell: 0.40,
+    max: 2,
+    target: 14,
+    dur: 45,
+    bombs: true,
+    gold: true,
+    desc: "Twelve holes now — and bombs. Sit on a bomb and you lose points and your streak."
+  },
+  {
+    n: 4,
+    name: "Twitch",
+    cols: 4,
+    rows: 3,
+    life: 1.4,
+    dwell: 0.34,
+    max: 3,
+    target: 18,
+    dur: 45,
+    bombs: true,
+    gold: true,
+    desc: "Three moles up at once. Plan the shortest path between them, don't chase."
+  },
+  {
+    n: 5,
+    name: "Endurance",
+    cols: 5,
+    rows: 3,
+    life: 1.15,
+    dwell: 0.30,
+    max: 3,
+    target: 24,
+    dur: 60,
+    bombs: true,
+    gold: true,
+    desc: "Fifteen holes, one minute, no mercy. This is the run you demo in week 13."
+  }
 ];
 
 const SRC_HINT = {
-  mouse: "The mouse is the body. The four ranges shown are modelled from the pointer for the top view only — the game reads the pointer directly, so tracking is perfect. Use this to tune the game itself.",
-  live: "Ranges come from Box 1 and Box 2 over the WebSocket bridge. Four real ultrasonic ranges in, one solved body position out. Opens the setup wizard so you can confirm both boxes are reporting."
+  mouse: "The mouse is the body. Sensors are simulated for the top view only — the game reads the pointer directly, so tracking is perfect. Use this to tune the game itself.",
+  sim: "The mouse is the true body position. The game only sees four noisy ultrasonic ranges and solves for you. This is the real pipeline, and the cyan dot is the unfiltered fix.",
+  live: "Ranges come from your ESP32 boxes over a WebSocket. Same solver, same filter, real hardware."
 };
