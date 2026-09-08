@@ -19,6 +19,8 @@ const SCOL = ["#45D0E8", "#9BE86B", "#FFB020", "#FF7BD5", "#B48CFF", "#FF8A5B"];
 const BIN_DEG = 2.0;            // bearing histogram bin width
 const BIN_LO = -95.0, BIN_HI = 95.0;
 const NBINS = Math.round((BIN_HI - BIN_LO) / BIN_DEG);
+const MIN_BIN_SAMPLES = 3;   // samples before a bearing bin counts as evidence
+const MIN_BINS = 6;          // distinct bearings needed before a fit is meaningful
 
 const ST = {
   layers: {
@@ -35,9 +37,15 @@ const ST = {
   coverage: null,       // cached coverage map
   coverageKey: "",
   lastKey: "",
+  notice: null,          // { text, cls, until } — sticky status message
   legacyFix: null,
   view: { ox: 0, oy: 0, s: 1 }
 };
+
+/** Post a status message that survives the per-frame sidebar refresh. */
+function notify(text, cls, ms) {
+  ST.notice = { text: text, cls: cls || "", until: performance.now() + (ms || 5000) };
+}
 
 /* ── Canvas plumbing ─────────────────────────────────────────── */
 const Y_TOP = -0.12, Y_BOT = 2.18;
@@ -127,15 +135,23 @@ function recordSample() {
       ST.hist[i].total[b]++;
       if (r != null) ST.hist[i].fired[b]++;
     }
-    if (r != null) {
-      ST.stats[i].min = Math.min(ST.stats[i].min, r);
-      ST.stats[i].max = Math.max(ST.stats[i].max, r);
-      ST.stats[i].count++;
-    }
   }
   ST.samples.push({ x: t.p.x, y: t.p.y, fired: fired, ranges: ranges });
   if (ST.samples.length > 20000) ST.samples.shift();
   return true;
+}
+
+/** Range extremes per sensor, accumulated over the whole session.
+ *  This is the direct answer to "how far does each sensor actually reach",
+ *  so it must run on every measurement — not only during a capture burst. */
+function accumulateStats() {
+  for (let i = 0; i < ST.stats.length; i++) {
+    const r = Tracker.rawRanges[i];
+    if (r == null) continue;
+    ST.stats[i].min = Math.min(ST.stats[i].min, r);
+    ST.stats[i].max = Math.max(ST.stats[i].max, r);
+    ST.stats[i].count++;
+  }
 }
 
 /* ── Coverage map ────────────────────────────────────────────── */
@@ -507,39 +523,93 @@ function drawHistograms() {
     const fit = fitCone(i);
     const lab = document.getElementById("hfit" + i);
     if (lab) {
-      lab.textContent = fit
-        ? `measured aim ${fit.aim.toFixed(1)}° · width ${fit.width.toFixed(1)}° (n=${fit.n})`
-        : "no samples";
-      lab.className = fit ? (Math.abs(fit.width - beamHalf(sen) * 2) > 8 ? "warn" : "ok") : "";
+      if (!fit) {
+        lab.textContent = "no samples";
+        lab.className = "";
+      } else if (fit.poor) {
+        lab.textContent = fit.why;
+        lab.className = "warn";
+      } else {
+        lab.textContent = `aim ${fit.aim.toFixed(1)}° · width ${fit.width.toFixed(1)}° ` +
+                          `(n=${fit.n}${fit.trusted ? "" : ", " + fit.edges + " edge only"})`;
+        lab.className = !fit.trusted ? "warn"
+                      : Math.abs(fit.width - beamHalf(sen) * 2) > 8 ? "warn" : "ok";
+      }
     }
   });
 }
 
 /**
- * Fit one cone from the bearing histogram: the widest contiguous run of bins
- * whose fire rate clears 50%, requiring a few samples per bin so a single
- * lucky echo cannot widen the answer.
+ * Fit one cone from the bearing histogram.
+ *
+ * Sampling is discrete: you stand on a dozen spots, so most 2 deg bins hold no
+ * data at all. An empty bin means "never tested here", NOT "the sensor was
+ * silent here" — treating the two the same chops a real 40 deg cone into 8 deg
+ * fragments. So the fired run extends straight across empty bins and only ever
+ * terminates at a bin that has data and was majority-silent.
+ *
+ * The true edge lies somewhere between the outermost bin that fired and the
+ * nearest bin that stayed silent, so the edge estimate is the midpoint of that
+ * bracket. Without a silent bin on a side, that side is unbounded and the fit
+ * is reported (so you can see it) but refused for Apply.
  */
+function binCentre(b) { return BIN_LO + (b + 0.5) * BIN_DEG; }
+
 function fitCone(i) {
   const h = ST.hist[i];
-  let bestLo = -1, bestHi = -1, lo = -1, n = 0;
   let total = 0;
-  for (let b = 0; b < NBINS; b++) total += h.total[b];
-  if (total < 20) return null;
-
-  for (let b = 0; b <= NBINS; b++) {
-    const good = b < NBINS && h.total[b] >= 3 && (h.fired[b] / h.total[b]) >= 0.5;
-    if (good && lo < 0) lo = b;
-    if (!good && lo >= 0) {
-      if (b - lo > bestHi - bestLo) { bestLo = lo; bestHi = b; }
-      lo = -1;
-    }
+  const firedB = [], silentB = [];
+  for (let b = 0; b < NBINS; b++) {
+    total += h.total[b];
+    if (h.total[b] < MIN_BIN_SAMPLES) continue;          // no evidence either way
+    (h.fired[b] / h.total[b] >= 0.5 ? firedB : silentB).push(b);
   }
-  if (bestLo < 0) return null;
-  for (let b = bestLo; b < bestHi; b++) n += h.total[b];
-  const dLo = BIN_LO + bestLo * BIN_DEG;
-  const dHi = BIN_LO + bestHi * BIN_DEG;
-  return { lo: dLo, hi: dHi, aim: (dLo + dHi) / 2, width: dHi - dLo, n: n };
+  const binsWithData = firedB.length + silentB.length;
+
+  if (total < 20) return null;
+  if (binsWithData < MIN_BINS) {
+    return { poor: true, binsWithData: binsWithData,
+             why: `only ${binsWithData} bearing${binsWithData === 1 ? "" : "s"} sampled — move around more` };
+  }
+  if (!firedB.length) {
+    return { poor: true, binsWithData: binsWithData,
+             why: "never fired at any sampled bearing" };
+  }
+
+  // Cluster the fired bins, splitting only where a SILENT bin sits between them.
+  let best = [firedB[0]], cur = [firedB[0]];
+  for (let k = 1; k < firedB.length; k++) {
+    const prev = firedB[k - 1], b = firedB[k];
+    const blocked = silentB.some(sb => sb > prev && sb < b);
+    if (blocked) cur = [b];
+    else cur.push(b);
+    if (cur[cur.length - 1] - cur[0] > best[best.length - 1] - best[0]) best = cur.slice();
+  }
+
+  const loF = best[0], hiF = best[best.length - 1];
+  let sLo = null, sHi = null;
+  for (const sb of silentB) {
+    if (sb < loF && (sLo === null || sb > sLo)) sLo = sb;
+    if (sb > hiF && (sHi === null || sb < sHi)) sHi = sb;
+  }
+
+  // Edge = midway between the last bin that fired and the first that did not.
+  const edgeLo = sLo !== null ? (binCentre(sLo) + binCentre(loF)) / 2
+                              : binCentre(loF) - BIN_DEG / 2;
+  const edgeHi = sHi !== null ? (binCentre(hiF) + binCentre(sHi)) / 2
+                              : binCentre(hiF) + BIN_DEG / 2;
+
+  let n = 0;
+  for (const b of best) n += h.total[b];
+
+  return {
+    lo: edgeLo, hi: edgeHi, aim: (edgeLo + edgeHi) / 2, width: edgeHi - edgeLo,
+    n: n, binsWithData: binsWithData,
+    edges: (sLo !== null && sHi !== null) ? "both" : sLo !== null ? "low" : sHi !== null ? "high" : "none",
+    trusted: sLo !== null && sHi !== null,
+    why: (sLo !== null && sHi !== null) ? ""
+         : "edge unbounded — also capture spots OUTSIDE this sensor's cone"
+  };
 }
 
 /* ── Sidebar: live values ────────────────────────────────────── */
@@ -567,7 +637,9 @@ function updateSidebar() {
                          : Tracker.mode === "blind" ? "var(--text-dim)" : "var(--signal)";
   setText("hEch", `${Tracker.nSensors} / ${sensors.length}`);
   setText("hHz", `${Tracker.measHz.toFixed(1)} Hz`);
-  setText("hReason", Tracker.reason || "—");
+  setText("hReason", Tracker.reason || (
+    Tracker.mode === "two-box" ? "clean two-box fix, no disagreement" :
+    Tracker.mode === "mouse" ? "pointer is the ground truth" : "—"));
 
   // Per-sensor table
   sensors.forEach((sen, i) => {
@@ -598,7 +670,9 @@ function updateSidebar() {
           fix && fix.worstMiss > SOLVER.sectorTolDeg ? "bad" : "");
   setText("kRes", fix ? MM(fix.residual) : "—");
   setText("kGate", String(Tracker.gateRejects), Tracker.gateRejects > 0 ? "warn" : "");
-  setText("kReason", Tracker.reason || "—");
+  setText("kReason", Tracker.reason || (
+    Tracker.mode === "two-box" ? "clean two-box fix — both boxes agree and the "
+      + "fix sits inside every firing sensor's cone" : "—"));
 
   // Old solver, for comparison
   ST.legacyFix = (Tracker.src === "mouse") ? null : solvePosition(Tracker.ranges, sensors);
@@ -644,8 +718,14 @@ function updateSidebar() {
   // Calibration
   setText("cSamples", String(ST.samples.length));
   setText("cTruthSrc", t.src);
-  setText("cStatus", ST.capture.active ? `capturing ${ST.capture.left} more…` : "idle",
-          ST.capture.active ? "warn" : "");
+  if (ST.notice && performance.now() > ST.notice.until) ST.notice = null;
+  if (ST.capture.active) {
+    setText("cStatus", `capturing ${ST.capture.left} more…`, "warn");
+  } else if (ST.notice) {
+    setText("cStatus", ST.notice.text, ST.notice.cls);
+  } else {
+    setText("cStatus", "idle", "");
+  }
 
   // Coverage
   const cov = computeCoverage();
@@ -697,9 +777,13 @@ function exportCSV() {
 
 function applyFits() {
   let applied = 0;
+  const refused = [];
   Tracker.sensors.forEach((sen, i) => {
     const f = fitCone(i);
-    if (!f) return;
+    const nm = sen.n != null ? sen.n : i;
+    if (!f) { refused.push(nm + ": no samples"); return; }
+    if (f.poor) { refused.push(nm + ": " + f.why); return; }
+    if (!f.trusted) { refused.push(nm + ": " + f.why); return; }
     sen.a = +f.aim.toFixed(2);
     sen.w = +f.width.toFixed(1);
     applied++;
@@ -707,8 +791,14 @@ function applyFits() {
     if (ta) { ta.value = sen.a; document.getElementById("tav" + i).textContent = sen.a.toFixed(1) + "°"; }
     if (tw) { tw.value = sen.w; document.getElementById("twv" + i).textContent = sen.w.toFixed(0) + "°"; }
   });
-  setText("cStatus", applied ? `fitted ${applied} sensor(s)` : "not enough samples to fit",
-          applied ? "ok" : "bad");
+
+  if (applied && !refused.length) {
+    notify(`fitted all ${applied} sensors`, "ok", 6000);
+  } else if (applied) {
+    notify(`fitted ${applied}, refused ${refused.length} — ${refused[0]}`, "warn", 9000);
+  } else {
+    notify(`nothing fitted — ${refused[0] || "no samples"}`, "bad", 9000);
+  }
   ST.coverageKey = "";
 }
 
@@ -735,9 +825,13 @@ function stLoop(now) {
   const key = rangeKey();
   if (key !== ST.lastKey) {
     ST.lastKey = key;
+    accumulateStats();
     if (ST.capture.active) {
       if (recordSample()) ST.capture.left--;
-      if (ST.capture.left <= 0) ST.capture.active = false;
+      if (ST.capture.left <= 0) {
+        ST.capture.active = false;
+        notify(`captured — ${ST.samples.length} samples total`, "ok", 4000);
+      }
     }
   }
   if (ST.capture.active && now - ST.capture.t0 > 6000) ST.capture.active = false;

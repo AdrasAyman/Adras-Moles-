@@ -78,7 +78,11 @@ function updateHUD() {
     roGap.textContent = Tracker.src === "mouse" ? "n/a" : `${(g * 1000.0).toFixed(0)} mm`;
     roGap.style.color = g > SOLVER.maxGap ? "var(--alarm)" : "";
   }
-  if (roReason) roReason.textContent = Tracker.reason || "—";
+  if (roReason) {
+    roReason.textContent = Tracker.reason || (
+      Tracker.mode === "two-box" ? "Clean two-box fix — both boxes agree." :
+      Tracker.mode === "mouse" ? "Pointer is the ground truth." : "—");
+  }
 
   const dot = $("#stDot");
   const txt = $("#stText");
