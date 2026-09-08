@@ -6,7 +6,7 @@
    ══════════════════════════════════════════════════════════════ */
 
 const G = {
-  phase: "start", // "start" | "play" | "levelup" | "over" | "pause"
+  phase: "start", // "start" | "count" | "play" | "levelup" | "over" | "pause"
   li: 0,
   score: 0,
   streak: 1,
@@ -20,20 +20,92 @@ const G = {
   dwellTarget: null,
   alarm: false,
   alarmT: 0,
+  cd: 0,
+  cdShown: -1,
+  endCdShown: -1,
   totalHits: 0,
   totalShown: 0,
   bestStreak: 1
 };
 
+// function buildHoles() {
+//   const L = LEVELS[G.li];
+//   G.holes = [];
+//   const mx = 0.16, my = 0.16; // Margins in normalized play-field units
+
+//   for (let r = 0; r < L.rows; r++) {
+//     for (let c = 0; c < L.cols; c++) {
+//       const u = L.cols === 1 ? 0.5 : mx + (c / (L.cols - 1)) * (1.0 - 2.0 * mx);
+//       const v = L.rows === 1 ? 0.5 : my + (r / (L.rows - 1)) * (1.0 - 2.0 * my);
+//       G.holes.push({
+//         u,
+//         v,
+//         x: u * AREA.w,
+//         y: AREA.yNear + v * AREA.deep,
+//         occupied: null
+//       });
+//     }
+//   }
+// }
+
 function buildHoles() {
   const L = LEVELS[G.li];
   G.holes = [];
-  const mx = 0.16, my = 0.16; // Margins in normalized play-field units
 
+  const mx = 0.16;
+  const my = 0.16;
+
+  // Random holes for levels that have randomHoles enabled
+  if (L.randomHoles) {
+    const total = L.cols * L.rows;
+
+    for (let i = 0; i < total; i++) {
+      let u, v;
+      let valid = false;
+
+      // Keep generating a position until it is far enough
+      // away from all existing holes
+      while (!valid) {
+        u = mx + Math.random() * (1.0 - 2.0 * mx);
+        v = my + Math.random() * (1.0 - 2.0 * my);
+
+        valid = true;
+
+        for (const h of G.holes) {
+          const dx = u - h.u;
+          const dy = v - h.v;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+
+          if (distance < 0.18) {
+            valid = false;
+            break;
+          }
+        }
+      }
+
+      G.holes.push({
+        u,
+        v,
+        x: u * AREA.w,
+        y: AREA.yNear + v * AREA.deep,
+        occupied: null
+      });
+    }
+
+    return;
+  }
+
+  // Normal grid for levels without randomHoles
   for (let r = 0; r < L.rows; r++) {
     for (let c = 0; c < L.cols; c++) {
-      const u = L.cols === 1 ? 0.5 : mx + (c / (L.cols - 1)) * (1.0 - 2.0 * mx);
-      const v = L.rows === 1 ? 0.5 : my + (r / (L.rows - 1)) * (1.0 - 2.0 * my);
+      const u = L.cols === 1
+        ? 0.5
+        : mx + (c / (L.cols - 1)) * (1.0 - 2.0 * mx);
+
+      const v = L.rows === 1
+        ? 0.5
+        : my + (r / (L.rows - 1)) * (1.0 - 2.0 * my);
+
       G.holes.push({
         u,
         v,
@@ -54,18 +126,47 @@ function startLevel(i) {
   G.dwell = 0;
   G.dwellTarget = null;
   buildHoles();
-  G.phase = "play";
-  spawn();
+
+  // Hold the round in a 5-second countdown before play begins.
+  G.cd = 5.0;
+  G.cdShown = -1;
+  G.endCdShown = -1;
+  G.phase = "count";
+  showCountdown(5, "GET READY");
 }
 
-function resetRun() {
+/* \u2500\u2500 Countdown display \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 */
+function showCountdown(n, label) {
+  const cd = document.getElementById("cd");
+  const num = document.getElementById("cdnum");
+  const lab = document.getElementById("cdlab");
+  if (!cd || !num) return;
+
+  num.textContent = n;
+  if (lab) lab.textContent = label || "";
+  cd.hidden = false;
+
+  // Restart the pop animation on every tick.
+  num.classList.remove("tick");
+  void num.offsetWidth;
+  num.classList.add("tick");
+
+  cd.classList.toggle("final", n <= 3);
+}
+
+function hideCountdown() {
+  const cd = document.getElementById("cd");
+  if (cd) cd.hidden = true;
+}
+
+function resetRun(startAt = 0) {
   G.score = 0;
   G.streak = 1;
   G.missed = 0;
   G.totalHits = 0;
   G.totalShown = 0;
   G.bestStreak = 1;
-  startLevel(0);
+  startLevel(Math.max(0, Math.min(startAt, LEVELS.length - 1)));
 }
 
 function spawn() {
@@ -139,6 +240,7 @@ function hit(m) {
 }
 
 function levelComplete() {
+  hideCountdown();
   if (G.li >= LEVELS.length - 1) {
     endRun("You cleared every level");
     return;
@@ -162,6 +264,7 @@ function levelComplete() {
 }
 
 function endRun(title) {
+  hideCountdown();
   G.phase = "over";
   Audio_.over();
   Audio_.alarmOff();
@@ -184,14 +287,14 @@ function endRun(title) {
 }
 
 function showOverlay(sel) {
-  ["#ovStart", "#ovLevel", "#ovEnd", "#ovPause"].forEach(s => {
+  ["#ovStart", "#ovLevel", "#ovEnd", "#ovPause", "#ovSetup"].forEach(s => {
     const el = document.querySelector(s);
     if (el) el.hidden = s !== sel;
   });
 }
 
 function hideAllOverlays() {
-  ["#ovStart", "#ovLevel", "#ovEnd", "#ovPause"].forEach(s => {
+  ["#ovStart", "#ovLevel", "#ovEnd", "#ovPause", "#ovSetup"].forEach(s => {
     const el = document.querySelector(s);
     if (el) el.hidden = true;
   });

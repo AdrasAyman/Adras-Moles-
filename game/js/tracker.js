@@ -26,11 +26,18 @@
 const Tracker = {
   src: "mouse",
   alpha: 0.35,
+<<<<<<< HEAD
   raw: null,          // unfiltered fix from the solver
   pos: null,          // filtered cursor {x,y,vx,vy}
   ranges: [],         // median-filtered surface ranges (metres)
   rawRanges: [],      // pre-median, straight off the wire
   rings: [],          // MedianRing per sensor
+=======
+  raw: null,
+  history: [], // Buffer of recent raw measurements for median filtering
+  pos: null,
+  ranges: [],
+>>>>>>> origin/main
   nSensors: 0,
   res: 0,
   hz: 0,              // render rate
@@ -40,6 +47,7 @@ const Tracker = {
   measCount: 0,
   measT: 0,
   stale: false,
+<<<<<<< HEAD
   layout: "2box4s",
 
   // Solver output & diagnostics (read by the HUD, radar and test page)
@@ -51,6 +59,10 @@ const Tracker = {
   gateRejects: 0,
   gateRejectedSince: 0,
   lastMeasT: 0,
+=======
+  wsState: "closed",
+  layout: "2box4s",
+>>>>>>> origin/main
 
   get sensors() {
     return LAYOUTS[this.layout].s;
@@ -73,6 +85,7 @@ const Tracker = {
     }
   },
 
+<<<<<<< HEAD
   /** Push one raw range vector through the median filter. */
   ingest(raw) {
     this.ensureRings();
@@ -87,6 +100,13 @@ const Tracker = {
   /** Per-sensor echo rate over the median window, for the HUD and test page. */
   fillRates() {
     return this.rings.map(r => r.fill());
+=======
+  live: {
+    ws: null,
+    ranges: [],
+    boxes: [],
+    t: 0
+>>>>>>> origin/main
   },
 
   update(dt) {
@@ -166,6 +186,7 @@ const Tracker = {
     }
 
     if (measured) {
+<<<<<<< HEAD
       const dT = Math.max(0.001, (now - this.lastMeasT) / 1000.0);
       this.lastMeasT = now;
 
@@ -206,6 +227,62 @@ const Tracker = {
           }
           this.gateRejects = 0;
         }
+=======
+      this.raw = measured;
+
+      // 1. Maintain History Buffer (Windowed median to reject ultrasonic multi-path bounce)
+      if (this.src !== "mouse") {
+         this.history.push({ x: measured.x, y: measured.y });
+         if (this.history.length > 15) this.history.shift(); // ~250ms window
+      } else {
+         this.history = [{ x: measured.x, y: measured.y }];
+      }
+
+      let medX = measured.x, medY = measured.y;
+      if (this.history.length > 0) {
+        const sortedX = [...this.history].sort((a, b) => a.x - b.x);
+        const sortedY = [...this.history].sort((a, b) => a.y - b.y);
+        const mid = Math.floor(this.history.length / 2);
+        medX = sortedX[mid].x;
+        medY = sortedY[mid].y;
+      }
+
+      const a = this.src === "mouse" ? 1.0 : this.alpha;
+      const b = (a * a) / (2.0 - a);
+
+      if (!this.pos) {
+        this.pos = { x: medX, y: medY, vx: 0, vy: 0 };
+      } else {
+        // 2. Predict next state based on current velocity
+        let px = this.pos.x + (this.pos.vx || 0) * dt;
+        let py = this.pos.y + (this.pos.vy || 0) * dt;
+
+        // Calculate residual (error between predicted and median measured)
+        let rx = medX - px;
+        let ry = medY - py;
+
+        // 3. Strict Kinematic Speed Thresholding (V_MAX)
+        // Max human sideways movement ~ 4.0 meters per second
+        const V_MAX = 4.0;
+        const maxJump = V_MAX * dt;
+        const jumpDist = Math.hypot(rx, ry);
+
+        if (this.src !== "mouse" && jumpDist > maxJump) {
+             rx = (rx / jumpDist) * maxJump;
+             ry = (ry / jumpDist) * maxJump;
+        }
+
+        // 4. Smooth Gradiate Update
+        const safeDt = Math.max(dt, 0.001);
+        this.pos.x = px + a * rx;
+        this.pos.y = py + a * ry;
+        this.pos.vx = (this.pos.vx || 0) + (b / safeDt) * rx;
+        this.pos.vy = (this.pos.vy || 0) + (b / safeDt) * ry;
+
+        // Apply friction
+        this.pos.vx *= 0.85;
+        this.pos.vy *= 0.85;
+>>>>>>> origin/main
       }
     }
 
@@ -233,16 +310,32 @@ const Tracker = {
       if (this.live.ws) this.live.ws.close();
     } catch (e) {}
 
+    this.wsState = "connecting";
     const wsStateEl = document.getElementById("wsState");
     if (wsStateEl) wsStateEl.textContent = "connecting";
 
     const ws = new WebSocket(url);
     this.live.ws = ws;
 
+<<<<<<< HEAD
     ws.onopen = () => { if (wsStateEl) wsStateEl.textContent = "open"; };
     ws.onclose = () => { if (wsStateEl) wsStateEl.textContent = "closed"; };
     ws.onerror = () => { if (wsStateEl) wsStateEl.textContent = "error"; };
 
+=======
+    ws.onopen = () => {
+      this.wsState = "open";
+      if (wsStateEl) wsStateEl.textContent = "open";
+    };
+    ws.onclose = () => {
+      this.wsState = "closed";
+      if (wsStateEl) wsStateEl.textContent = "closed";
+    };
+    ws.onerror = () => {
+      this.wsState = "error";
+      if (wsStateEl) wsStateEl.textContent = "error";
+    };
+>>>>>>> origin/main
     ws.onmessage = ev => {
       try {
         const m = JSON.parse(ev.data);
@@ -262,8 +355,14 @@ const Tracker = {
         } else {
           return;
         }
+<<<<<<< HEAD
 
         this.live.ranges = out;
+=======
+        // Per-box health from bridge/pipeline.py — the setup wizard needs this
+        if (Array.isArray(m.boxes)) this.live.boxes = m.boxes;
+
+>>>>>>> origin/main
         this.live.t = performance.now();
 
         // The bridge pumps at 30 Hz but the sensors only ping at ~15.6 Hz, so

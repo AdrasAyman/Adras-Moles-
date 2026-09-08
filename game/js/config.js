@@ -56,16 +56,24 @@ const LAYOUTS = {
     name: "4 IN LINE",
     hint: "Two boxes, two sensors each, evenly spread in a straight line across the wall.",
     s: [
+<<<<<<< HEAD
       { n: "0", x: 0.19, y: 0.30, a: 0, w: 40 },
       { n: "1", x: 0.56, y: 0.30, a: 0, w: 40 },
       { n: "2", x: 0.94, y: 0.30, a: 0, w: 40 },
       { n: "3", x: 1.31, y: 0.30, a: 0, w: 40 }
+=======
+      { x: 0.19, y: 0.30, a: 0, box: 1, slot: 1 },
+      { x: 0.56, y: 0.30, a: 0, box: 1, slot: 2 },
+      { x: 0.94, y: 0.30, a: 0, box: 2, slot: 1 },
+      { x: 1.31, y: 0.30, a: 0, box: 2, slot: 2 }
+>>>>>>> origin/main
     ]
   },
   "2box4s": {
     name: "2 CORNER BOXES (4 SENSORS)",
     hint: "The built rig. Box 0 (A,B) bottom-left, Box 1 (X,Y) bottom-right. Each sensor is ~40 deg wide but the pair is mounted only 25 deg apart, so each box covers ~65 deg with ~15 deg of overlap in the middle. That overlap is what gives the boolean sector solver three sectors per box instead of two.",
     s: [
+<<<<<<< HEAD
       { n: "A", x: 0.00, y: 0.30, a:  26.85, w: 40 },  // left box, aimed forward
       { n: "B", x: 0.00, y: 0.30, a:  51.85, w: 40 },  // left box, aimed along the wall
       { n: "X", x: 1.50, y: 0.30, a: -51.85, w: 40 },  // right box, aimed along the wall
@@ -78,31 +86,51 @@ const LAYOUTS = {
     s: [
       { n: "L", x: 0.10, y: 0.30, a: 14, w: 40 },
       { n: "R", x: 1.40, y: 0.30, a: -14, w: 40 }
+=======
+      { x: 0.00, y: 0.30, a: 45.0, box: 1, slot: 1 },
+      { x: 0.00, y: 0.30, a: -90.0, box: 1, slot: 2 },
+      { x: 1.50, y: 0.30, a: 90.0, box: 2, slot: 1 },
+      { x: 1.50, y: 0.30, a: -45.0, box: 2, slot: 2 }
+>>>>>>> origin/main
     ]
   },
   "4wide": {
     name: "4 SPLAYED",
     hint: "Outer pair splayed toward the middle. Wider usable footprint, but the beams overlap.",
     s: [
+<<<<<<< HEAD
       { n: "0", x: 0.06, y: 0.30, a: 26, w: 40 },
       { n: "1", x: 0.52, y: 0.30, a: 6, w: 40 },
       { n: "2", x: 0.98, y: 0.30, a: -6, w: 40 },
       { n: "3", x: 1.44, y: 0.30, a: -26, w: 40 }
+=======
+      { x: 0.06, y: 0.30, a: 26, box: 1, slot: 1 },
+      { x: 0.52, y: 0.30, a: 6, box: 1, slot: 2 },
+      { x: 0.98, y: 0.30, a: -6, box: 2, slot: 1 },
+      { x: 1.44, y: 0.30, a: -26, box: 2, slot: 2 }
+>>>>>>> origin/main
     ]
   }
 };
+
+LAYOUTS["2box"] = LAYOUTS["2box4s"];
+
+const BOXES = [
+  { id: 1, label: "BOX 1", side: "LEFT",  idx: [0, 1] },
+  { id: 2, label: "BOX 2", side: "RIGHT", idx: [2, 3] }
+];
 
 const LEVELS = [
   {
     n: 1,
     name: "Warm up",
     cols: 3,
-    rows: 2,
-    life: 2.6,
-    dwell: 0.50,
+    rows: 3, //2
+    life: 5.0,//2.6
+    dwell: 0.4,//0.50
     max: 1,
-    target: 6,
-    dur: 45,
+    target: 6,//6
+    dur: 50,
     bombs: false,
     gold: false,
     desc: "Six holes, one mole at a time. Learn how the cursor answers your body."
@@ -111,13 +139,13 @@ const LEVELS = [
     n: 2,
     name: "Faster moles",
     cols: 3,
-    rows: 2,
-    life: 2.0,
-    dwell: 0.45,
+    rows: 3,
+    life: 4.5,
+    dwell: 0.35,
     max: 2,
-    target: 10,
+    target: 8,
     dur: 45,
-    bombs: false,
+    bombs: true,
     gold: true,
     desc: "Two moles can share the field, and gold ones are worth triple."
   },
@@ -126,11 +154,11 @@ const LEVELS = [
     name: "Wider field",
     cols: 4,
     rows: 3,
-    life: 1.8,
-    dwell: 0.40,
+    life: 4.0,
+    dwell: 0.30,
     max: 2,
-    target: 14,
-    dur: 45,
+    target: 10,
+    dur: 40,
     bombs: true,
     gold: true,
     desc: "Twelve holes now — and bombs. Sit on a bomb and you lose points and your streak."
@@ -140,11 +168,11 @@ const LEVELS = [
     name: "Twitch",
     cols: 4,
     rows: 3,
-    life: 1.4,
-    dwell: 0.34,
+    life: 3.0,
+    dwell: 0.3,
     max: 3,
-    target: 18,
-    dur: 45,
+    target: 12,
+    dur: 35,
     bombs: true,
     gold: true,
     desc: "Three moles up at once. Plan the shortest path between them, don't chase."
@@ -152,15 +180,16 @@ const LEVELS = [
   {
     n: 5,
     name: "Endurance",
-    cols: 5,
+    cols: 4,
     rows: 3,
-    life: 1.15,
-    dwell: 0.30,
+    life: 2.50,
+    dwell: 0.3,
     max: 3,
-    target: 24,
-    dur: 60,
+    target: 14,
+    dur: 30,
     bombs: true,
     gold: true,
+    randomHoles: true,
     desc: "Fifteen holes, one minute, no mercy. This is the run you demo in week 13."
   }
 ];

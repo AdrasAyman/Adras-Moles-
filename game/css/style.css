@@ -319,6 +319,156 @@ aside {
   font-variant-numeric: tabular-nums;
 }
 
+/* ── Per-Sensor Live Readings ───────────────────────────────── */
+.sensor-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.sensrow {
+  display: grid;
+  grid-template-columns: auto 1fr 4.5rem 3.6rem;
+  align-items: center;
+  gap: 0.5rem;
+  font: 500 0.68rem/1 var(--mono);
+}
+
+.sdot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--line);
+  flex: none;
+}
+
+.sdot.ok {
+  background: var(--data);
+  box-shadow: 0 0 6px var(--data);
+}
+
+.slabel {
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.slabel small {
+  display: block;
+  font-size: 0.85em;
+  color: var(--text-dim);
+  letter-spacing: 0.03em;
+}
+
+.sbar {
+  position: relative;
+  height: 5px;
+  background: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.sbar i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 0%;
+  background: var(--data);
+  transition: width 0.1s linear;
+}
+
+.sval {
+  text-align: right;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Sensor Reading Group Headers (Box 1 / Box 2) ────────────── */
+.sgroup {
+  font: 600 0.55rem/1 var(--mono);
+  letter-spacing: 0.14em;
+  color: var(--text-dim);
+  margin-top: 0.15rem;
+}
+
+.sgroup:first-child {
+  margin-top: 0;
+}
+
+/* ── Sensor Layout Panel — two boxes, two sensors each ───────── */
+.boxgrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+}
+
+.boxcard {
+  background: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  padding: 0.45rem 0.5rem;
+}
+
+.boxcard.live {
+  border-color: rgba(69, 208, 232, 0.45);
+}
+
+.boxhead {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-bottom: 0.35rem;
+  padding-bottom: 0.3rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.bdot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--line);
+  flex: none;
+}
+
+.bdot.ok {
+  background: var(--data);
+  box-shadow: 0 0 6px var(--data);
+}
+
+.bname {
+  font: 600 0.6rem/1 var(--mono);
+  letter-spacing: 0.08em;
+  color: var(--text);
+}
+
+.bside {
+  margin-left: auto;
+  font: 500 0.52rem/1 var(--mono);
+  letter-spacing: 0.1em;
+  color: var(--text-dim);
+}
+
+.boxrow {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font: 500 0.66rem/1.7 var(--mono);
+}
+
+.bslot {
+  color: var(--text-dim);
+}
+
+.bval {
+  color: var(--data);
+  font-variant-numeric: tabular-nums;
+}
+
+.bval.off {
+  color: var(--text-dim);
+}
+
 .seg {
   display: flex;
   gap: 1px;
@@ -512,6 +662,47 @@ footer .spacer {
   letter-spacing: 0.05em;
 }
 
+/* ── ESP32 Setup Wizard ─────────────────────────────────────── */
+.setup-panel {
+  width: min(90vw, 460px);
+  text-align: left;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 0.9rem 1rem;
+}
+
+.boxtable {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 0.7rem;
+  font: 500 0.68rem/1.5 var(--mono);
+}
+
+.boxtable th {
+  text-align: left;
+  font: 600 0.56rem/1 var(--mono);
+  letter-spacing: 0.1em;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  padding: 0.3rem 0.4rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.boxtable td {
+  padding: 0.4rem;
+  border-bottom: 1px solid var(--line);
+  font-variant-numeric: tabular-nums;
+}
+
+.boxtable tr:last-child td {
+  border-bottom: 0;
+}
+
+.boxtable .dot {
+  display: inline-block;
+}
+
 /* ── Dead-Zone Visual Alarm ─────────────────────────────────── */
 #dz {
   position: absolute;
@@ -565,6 +756,7 @@ footer .spacer {
     transition: none !important;
   }
 }
+<<<<<<< HEAD
 
 /* ── Cross-page nav link (header "SENSOR TEST") ─────────────── */
 .navlink {
@@ -575,3 +767,118 @@ footer .spacer {
   font-size: 0.66rem;
   white-space: nowrap;
 }
+=======
+  
+/* ── Level Select (start overlay) ───────────────────────────── */
+.lvpick-label {
+  font: 600 0.6rem/1 var(--mono);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.lvpick {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  justify-content: center;
+  max-width: min(90vw, 640px);
+}
+
+.lvcard {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 0.55rem 0.9rem;
+  min-width: 6.5rem;
+  cursor: pointer;
+  text-align: center;
+  color: var(--text-dim);
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+
+.lvcard:hover {
+  border-color: var(--signal);
+  background: var(--panel-2);
+}
+
+.lvcard .n {
+  display: block;
+  font: 700 1.5rem/1 var(--display);
+  color: #E6EDF3;
+}
+
+.lvcard .nm {
+  display: block;
+  font: 500 0.6rem/1.4 var(--mono);
+  letter-spacing: 0.05em;
+  margin-top: 0.15rem;
+}
+
+.lvcard .gr {
+  display: block;
+  font: 500 0.55rem/1.4 var(--mono);
+  color: var(--line);
+  margin-top: 0.1rem;
+}
+
+.lvcard.sel {
+  border-color: var(--signal);
+  background: var(--panel-2);
+}
+
+.lvcard.sel .n,
+.lvcard.sel .nm {
+  color: var(--signal);
+}
+
+/* ── Round Countdown ────────────────────────────────────────── */
+#cd {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+}
+
+#cd[hidden] {
+  display: none;
+}
+
+#cdnum {
+  font: 700 clamp(5rem, 22vw, 14rem)/1 var(--display);
+  color: var(--signal);
+  text-shadow: 0 0 40px rgba(155, 232, 107, 0.45);
+  line-height: 1;
+}
+
+#cdlab {
+  font: 600 0.72rem/1 var(--mono);
+  letter-spacing: 0.45em;
+  text-indent: 0.45em;
+  color: var(--text-dim);
+}
+
+#cd.final #cdnum {
+  color: var(--alarm);
+  text-shadow: 0 0 40px rgba(255, 77, 61, 0.45);
+}
+
+#cdnum.tick {
+  animation: cdpop 0.42s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes cdpop {
+  0%   { transform: scale(1.7); opacity: 0; }
+  35%  { transform: scale(1);   opacity: 1; }
+  100% { transform: scale(1);   opacity: 0.85; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #cdnum.tick { animation: none; }
+}
+>>>>>>> origin/main

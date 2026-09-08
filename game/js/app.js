@@ -1,8 +1,8 @@
 "use strict";
 /* ══════════════════════════════════════════════════════════════
    MOLEFIELD — Application Controller & Loop
-   Coordinates user input, UI HUD updates, URL bootstrapping,
-   dead-zone supervision, and the main animation loop.
+     BOX 1 (left)  → S0, S1
+     BOX 2 (right) → S2, S3
    ══════════════════════════════════════════════════════════════ */
 
 const $ = s => document.querySelector(s);
@@ -20,7 +20,98 @@ function fitStageIfNeeded() {
   }
 }
 
+function buildSensorRows() {
+  const list = $("#sensorList");
+  if (!list) return;
+  list.innerHTML = BOXES.map(b => {
+    const rows = b.idx.map(i => {
+      const sen = Tracker.sensors[i];
+      return `
+      <div class="sensrow" data-i="${i}">
+        <span class="sdot"></span>
+        <span class="slabel">S${i}<small>Box ${b.id} · S${sen.slot}</small></span>
+        <span class="sbar"><i></i></span>
+        <span class="sval">—</span>
+      </div>`;
+    }).join("");
+    return `<div class="sgroup">${b.label} · ${b.side}</div>${rows}`;
+  }).join("");
+}
+
+function buildLayoutPanel() {
+  const wrap = $("#boxLayout");
+  if (!wrap) return;
+  wrap.innerHTML = BOXES.map(b => {
+    const rows = b.idx.map(i => {
+      const sen = Tracker.sensors[i];
+      return `
+        <div class="boxrow" data-i="${i}">
+          <span class="bslot">S${sen.slot}</span>
+          <span class="bval">—</span>
+        </div>`;
+    }).join("");
+    return `
+      <div class="boxcard" data-box="${b.id}">
+        <div class="boxhead">
+          <span class="bdot"></span>
+          <span class="bname">${b.label}</span>
+          <span class="bside">${b.side}</span>
+        </div>
+        ${rows}
+      </div>`;
+  }).join("");
+}
+
+const SENSOR_BAR_MAX_M = 3.0;
+
+// Only redraw a number once it has genuinely moved by 1.5 cm.
+const DISPLAY_DEADBAND_M = 0.015;
+const shownRange = [];
+
+function displayRange(i, r) {
+  if (r == null) { shownRange[i] = null; return "—"; }
+  if (shownRange[i] == null || Math.abs(r - shownRange[i]) >= DISPLAY_DEADBAND_M) {
+    shownRange[i] = r;
+  }
+  return `${shownRange[i].toFixed(2)} m`;
+}
+
+function updateSensorReadings() {
+  document.querySelectorAll("#sensorList .sensrow").forEach(row => {
+    const i = +row.dataset.i;
+    const r = Tracker.ranges[i];
+    const has = r != null;
+    const dot = row.querySelector(".sdot");
+    const bar = row.querySelector(".sbar i");
+    const val = row.querySelector(".sval");
+    if (dot) dot.classList.toggle("ok", has);
+    if (bar) bar.style.width = has ? `${Math.min(100, (r / SENSOR_BAR_MAX_M) * 100.0).toFixed(0)}%` : "0%";
+    if (val) val.textContent = displayRange(i, r);
+  });
+
+  document.querySelectorAll("#boxLayout .boxrow").forEach(row => {
+    const i = +row.dataset.i;
+    const r = Tracker.ranges[i];
+    const val = row.querySelector(".bval");
+    if (val) {
+      val.textContent = displayRange(i, r);
+      val.classList.toggle("off", r == null);
+    }
+  });
+
+  document.querySelectorAll("#boxLayout .boxcard").forEach(card => {
+    const box = BOXES.find(b => b.id === +card.dataset.box);
+    const alive = box ? box.idx.some(i => Tracker.ranges[i] != null) : false;
+    const dot = card.querySelector(".bdot");
+    if (dot) dot.classList.toggle("ok", alive);
+    card.classList.toggle("live", alive);
+  });
+}
+
 function updateHUD() {
+  if (Tracker.src === "live") Setup.tick();
+  updateSensorReadings();
+
   const uiScore = $("#uiScore");
   const uiLevel = $("#uiLevel");
   const uiStreak = $("#uiStreak");
@@ -43,12 +134,11 @@ function updateHUD() {
   const roPos = $("#roPos");
   const roDepth = $("#roDepth");
   const roN = $("#roN");
-  const roRes = $("#roRes");
-  const roHz = $("#roHz");
 
-  if (roPos) roPos.textContent = p ? `${p.x.toFixed(3)}, ${p.y.toFixed(3)} m` : "—";
+  if (roPos) roPos.textContent = p ? `${p.x.toFixed(2)}, ${p.y.toFixed(2)} m` : "—";
   if (roDepth) roDepth.textContent = p ? `${p.y.toFixed(2)} m` : "—";
   if (roN) roN.textContent = `${Tracker.nSensors} / ${Tracker.sensors.length}`;
+<<<<<<< HEAD
   if (roRes) roRes.textContent = Tracker.src === "mouse" ? "n/a" : `${(Tracker.res * 1000.0).toFixed(0)} mm`;
   if (roHz) roHz.textContent = `${Tracker.hz.toFixed(0)} / ${Tracker.measHz.toFixed(1)} Hz`;
 
@@ -83,6 +173,8 @@ function updateHUD() {
       Tracker.mode === "two-box" ? "Clean two-box fix — both boxes agree." :
       Tracker.mode === "mouse" ? "Pointer is the ground truth." : "—");
   }
+=======
+>>>>>>> origin/main
 
   const dot = $("#stDot");
   const txt = $("#stText");
@@ -152,15 +244,44 @@ function mainLoop(now) {
 
   const dz = $("#dz");
 
-  if (G.phase === "play") {
+  if (G.phase === "count") {
+    G.cd -= dt;
+    const n = Math.ceil(G.cd);
+
+    if (n !== G.cdShown && n > 0) {
+      G.cdShown = n;
+      showCountdown(n, "GET READY");
+      Audio_.blip(n <= 3 ? 660 : 440, 0.09, "square", 0.16);
+    }
+
+    if (G.cd <= 0) {
+      hideCountdown();
+      G.phase = "play";
+      Audio_.blip(1046, 0.22, "square", 0.2);
+      spawn();
+    }
+  } else if (G.phase === "play") {
     const L = LEVELS[G.li];
     G.t -= dt;
     if (G.t <= 0) {
       G.t = 0;
+      hideCountdown();
       endRun("Time");
     }
 
-    // Dead-zone supervision — independent of game state
+    // Final 5 seconds: count the round out.
+    const endN = Math.ceil(G.t);
+    if (G.t > 0 && G.t <= 5) {
+      if (endN !== G.endCdShown) {
+        G.endCdShown = endN;
+        showCountdown(endN, "TIME");
+        Audio_.blip(endN <= 3 ? 880 : 587, 0.08, "square", 0.14);
+      }
+    } else if (G.endCdShown !== -1) {
+      G.endCdShown = -1;
+      hideCountdown();
+    }
+
     const inDead = Tracker.pos && Tracker.pos.y < AREA.yNear && !Tracker.stale;
     if (inDead !== G.alarm) {
       G.alarm = inDead;
@@ -169,7 +290,6 @@ function mainLoop(now) {
       else Audio_.alarmOff();
     }
 
-    // Update active moles
     for (const m of G.moles) {
       m.age += dt;
       if (m.state === "rise") {
@@ -192,10 +312,9 @@ function mainLoop(now) {
       }
     }
 
-    // Dwell-to-whack detection
     if (Tracker.pos && !G.alarm && !Tracker.stale) {
       let target = null, bestD = Infinity;
-      const grab = 0.17; // Metres: body centre must be within 17 cm of hole
+      const grab = 0.17;
       for (const m of G.moles) {
         if (m.dead || m.state === "sink") continue;
         const d = Math.hypot(Tracker.pos.x - m.hole.x, Tracker.pos.y - m.hole.y);
@@ -224,7 +343,6 @@ function mainLoop(now) {
     if (liveCount < L.max && Math.random() < dt * 2.2) spawn();
     if (liveCount === 0 && G.moles.length === 0) spawn();
 
-    // Particle / score effect bursts
     for (const f of G.fx) f.t += dt;
     G.fx = G.fx.filter(f => f.t < 0.6);
   } else if (G.alarm) {
@@ -240,7 +358,29 @@ function mainLoop(now) {
   requestAnimationFrame(mainLoop);
 }
 
-// ── DOM Event Setup ──────────────────────────────────────────────────────────
+/* ── Level select on the start overlay ─────────────────────── */
+let pickedLevel = 0;
+
+function buildLevelPicker() {
+  const wrap = document.getElementById("lvPick");
+  if (!wrap) return;
+
+  wrap.innerHTML = LEVELS.map((L, i) => `
+    <div class="lvcard${i === pickedLevel ? " sel" : ""}" data-lv="${i}" title="${L.desc}">
+      <span class="n">${L.n}</span>
+      <span class="nm">${L.name}</span>
+      <span class="gr">${L.cols * L.rows} holes · ${L.dur}s</span>
+    </div>`).join("");
+
+  wrap.querySelectorAll(".lvcard").forEach(card => {
+    card.onclick = () => {
+      pickedLevel = +card.dataset.lv;
+      wrap.querySelectorAll(".lvcard").forEach(c => c.classList.remove("sel"));
+      card.classList.add("sel");
+    };
+  });
+}
+
 function initApp() {
   const stage = $("#stage");
   if (stage) {
@@ -276,17 +416,18 @@ function initApp() {
     }
   });
 
+  buildLevelPicker();
+
   const btnStart = $("#btnStart");
   const btnNext = $("#btnNext");
   const btnAgain = $("#btnAgain");
   const btnResume = $("#btnResume");
 
-  if (btnStart) btnStart.onclick = () => { Audio_.init(); hideAllOverlays(); resetRun(); };
+  if (btnStart) btnStart.onclick = () => { Audio_.init(); hideAllOverlays(); resetRun(pickedLevel); };
   if (btnNext) btnNext.onclick = () => { hideAllOverlays(); startLevel(G.li + 1); };
-  if (btnAgain) btnAgain.onclick = () => { hideAllOverlays(); resetRun(); };
+  if (btnAgain) btnAgain.onclick = () => { hideAllOverlays(); resetRun(pickedLevel); };
   if (btnResume) btnResume.onclick = () => { hideAllOverlays(); G.phase = "play"; };
 
-  // Source segmented buttons (Mouse / Sim / Live)
   document.querySelectorAll("[data-src]").forEach(b => {
     b.onclick = () => {
       document.querySelectorAll("[data-src]").forEach(o => o.setAttribute("aria-pressed", o === b));
@@ -296,9 +437,11 @@ function initApp() {
       const wsField = $("#wsField");
       if (hint) hint.textContent = SRC_HINT[Tracker.src];
       if (wsField) wsField.hidden = Tracker.src !== "live";
+      if (Tracker.src === "live") Setup.open();
     };
   });
 
+<<<<<<< HEAD
   // Layout segmented buttons (4lin / 2box / 4wide)
   document.querySelectorAll("[data-lay]").forEach(b => {
     b.onclick = () => {
@@ -313,16 +456,28 @@ function initApp() {
       if (hint) hint.textContent = LAYOUTS[Tracker.layout].hint;
     };
   });
+=======
+  const setupConnect = $("#setupConnect");
+  if (setupConnect) setupConnect.onclick = () => Setup.connect();
+>>>>>>> origin/main
 
-  const wsConnect = $("#wsConnect");
-  if (wsConnect) {
-    wsConnect.onclick = () => {
-      const wsUrlInput = $("#wsUrl");
-      if (wsUrlInput) Tracker.connect(wsUrlInput.value.trim());
+  const btnReopenSetup = $("#btnReopenSetup");
+  if (btnReopenSetup) btnReopenSetup.onclick = () => Setup.open();
+
+  const btnSetupDone = $("#btnSetupDone");
+  if (btnSetupDone) {
+    btnSetupDone.onclick = () => { Audio_.init(); hideAllOverlays(); resetRun(pickedLevel); };
+  }
+
+  const btnSetupSkip = $("#btnSetupSkip");
+  if (btnSetupSkip) {
+    btnSetupSkip.onclick = () => {
+      const mouseBtn = document.querySelector('[data-src="mouse"]');
+      if (mouseBtn) mouseBtn.click();
+      hideAllOverlays();
     };
   }
 
-  // Simulation Sliders
   const bindSlider = (id, out, fn, fmt) => {
     const el = $(id);
     const outEl = $(out);
@@ -335,19 +490,16 @@ function initApp() {
     apply();
   };
 
+<<<<<<< HEAD
   bindSlider("#sNoise", "#vNoise", v => (Sim.noise = v / 1000.0), v => v + " mm");
   bindSlider("#sDrop", "#vDrop", v => (Sim.drop = v / 100.0), v => v + " %");
   bindSlider("#sBeam", "#vBeam", v => (Sim.beamOverride = v), v => v + "°");
   bindSlider("#sAlpha", "#vAlpha", v => (Tracker.alpha = v / 100.0), v => (v / 100.0).toFixed(2));
+=======
+>>>>>>> origin/main
 
-  // ── URL Bootstrapper ───────────────────────────────────────────────────────
   (function bootFromUrl() {
     const q = new URLSearchParams(location.search);
-    const lay = q.get("layout");
-    if (lay && LAYOUTS[lay]) {
-      const b = document.querySelector(`[data-lay="${lay}"]`);
-      if (b) b.click();
-    }
 
     const wsPort = q.get("ws");
     const wsUrlInput = $("#wsUrl");
@@ -356,13 +508,9 @@ function initApp() {
       wsUrlInput.value = url;
     }
 
-    const src = q.get("src");
-    if (src === "live" || src === "sim") {
-      const b = document.querySelector(`[data-src="${src}"]`);
+    if (q.get("src") === "live") {
+      const b = document.querySelector('[data-src="live"]');
       if (b) b.click();
-      if (src === "live" && wsUrlInput) {
-        Tracker.connect(wsUrlInput.value.trim());
-      }
     }
   })();
 
@@ -371,6 +519,8 @@ function initApp() {
   if (srcHint) srcHint.textContent = SRC_HINT[Tracker.src];
   if (layHint) layHint.textContent = LAYOUTS[Tracker.layout].hint;
 
+  buildSensorRows();
+  buildLayoutPanel();
   buildHoles();
   fitStage();
   window.addEventListener("resize", fitStage);
