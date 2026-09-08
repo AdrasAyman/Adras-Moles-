@@ -565,3 +565,13 @@ footer .spacer {
     transition: none !important;
   }
 }
+
+/* ── Cross-page nav link (header "SENSOR TEST") ─────────────── */
+.navlink {
+  display: inline-block;
+  text-decoration: none;
+  text-align: center;
+  padding: 0.45rem 0.8rem;
+  font-size: 0.66rem;
+  white-space: nowrap;
+}

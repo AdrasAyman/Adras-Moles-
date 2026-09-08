@@ -33,6 +33,10 @@
         <div class="k" id="uiPhaseK">Time left</div>
         <div class="v" id="uiTime">45.0</div>
       </div>
+      <div class="hcell" style="justify-content:center">
+        <a class="cta ghost navlink" id="btnSensorTest" href="sensortest.html"
+           title="Open the triangulation test bench: live cones, sector logic, calibration">SENSOR TEST</a>
+      </div>
     </header>
     <div id="timebar"><div id="timefill" style="width:100%"></div></div>
 
@@ -141,8 +145,12 @@
           <div class="readout"><span>Position</span><span id="roPos">—</span></div>
           <div class="readout"><span>Depth from wall</span><span id="roDepth">—</span></div>
           <div class="readout"><span>Sensors returning</span><span id="roN">0 / 4</span></div>
+          <div class="readout"><span>Solve mode</span><span id="roMode">—</span></div>
+          <div class="readout"><span>Uncertainty ±</span><span id="roSigma">—</span></div>
           <div class="readout"><span>Fit residual</span><span id="roRes">—</span></div>
-          <div class="readout"><span>Update rate</span><span id="roHz">— Hz</span></div>
+          <div class="readout"><span>Range gap</span><span id="roGap">—</span></div>
+          <div class="readout"><span>Render / measure</span><span id="roHz">— Hz</span></div>
+          <p class="hint" id="roReason" style="margin-top:0.4rem">—</p>
         </div>
 
         <div class="sec">
@@ -171,9 +179,14 @@
             <input type="range" id="sDrop" min="0" max="40" value="3">
           </div>
           <div class="field">
-            <label>Beam half-angle <b id="vBeam">30°</b></label>
-            <input type="range" id="sBeam" min="10" max="60" value="30">
+            <label>Sim beam width <b id="vBeam">40°</b></label>
+            <input type="range" id="sBeam" min="15" max="80" value="40">
           </div>
+          <p class="hint" style="margin:-0.2rem 0 0.5rem">
+            This is the width the <i>simulated</i> sensors actually see with. The solver
+            always uses each sensor's calibrated <code>w</code>, so moving this away from
+            40° simulates a mis-calibrated rig — the most useful robustness test you have.
+          </p>
           <div class="field">
             <label>Smoothing α <b id="vAlpha">0.20</b></label>
             <input type="range" id="sAlpha" min="5" max="100" value="20">
@@ -221,6 +234,7 @@
 
   <!-- Modular Scripts -->
   <script src="js/config.js"></script>
+  <script src="js/sectors.js"></script>
   <script src="js/audio.js"></script>
   <script src="js/solver.js"></script>
   <script src="js/tracker.js"></script>

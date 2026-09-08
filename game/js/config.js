@@ -22,43 +22,72 @@ const AREA = {
   bodyR: 0.20        // Modelled torso radius (surface to centre)
 };
 
+/* ── Acoustic beam model ──────────────────────────────────────
+   `w` on each sensor below is the FULL cone width in degrees.
+   Bearing convention throughout the codebase is atan2(dx, dy):
+   0deg points straight out from the wall, POSITIVE turns toward +x.
+
+   !! THESE ARE UNCALIBRATED DEFAULTS !!
+   The 40deg width is a bench estimate, not a measurement, and the
+   aim angles are reconstructed from the intended mounting rather
+   than measured off the built hardware. Run sensortest.html,
+   capture a calibration sweep, and paste the fitted values back
+   in here before trusting any of the sector logic.
+   ────────────────────────────────────────────────────────────── */
+const BEAM = {
+  defaultWidth: 40.0,  // Full cone width (deg) when a sensor omits `w`
+  maxRange: 2.40,      // Hard ceiling from ECHO_TIMEOUT_US in the firmware
+  minRange: 0.04       // Firmware rejects anything below this
+};
+
+/* ── Solver / filter tuning ───────────────────────────────────── */
+const SOLVER = {
+  medianWindow: 5,      // Samples of median filtering on each raw range
+  measureHz: 15.6,      // True sensor ping rate; sim generates at this rate
+  maxSpeed: 4.0,        // m/s — measurements implying more are rejected
+  gateTimeoutMs: 500,   // ...but after this long we re-acquire anyway
+  sectorTolDeg: 6.0,    // Slack before a fix is vetoed for leaving its cone
+  maxGap: 0.35,         // m — circle separation above this is not a real fix
+  pairSpreadWarn: 0.25  // m — co-located sensors disagreeing by more than this
+};
+
 const LAYOUTS = {
   "4lin": {
     name: "4 IN LINE",
     hint: "Two boxes, two sensors each, evenly spread in a straight line across the wall.",
     s: [
-      { x: 0.19, y: 0.30, a: 0 },
-      { x: 0.56, y: 0.30, a: 0 },
-      { x: 0.94, y: 0.30, a: 0 },
-      { x: 1.31, y: 0.30, a: 0 }
+      { n: "0", x: 0.19, y: 0.30, a: 0, w: 40 },
+      { n: "1", x: 0.56, y: 0.30, a: 0, w: 40 },
+      { n: "2", x: 0.94, y: 0.30, a: 0, w: 40 },
+      { n: "3", x: 1.31, y: 0.30, a: 0, w: 40 }
     ]
   },
   "2box4s": {
     name: "2 CORNER BOXES (4 SENSORS)",
-    hint: "Box 0 on left, Box 1 on right. Sensor 0/2 faces 45° into the table, and Sensor 1/3 faces the wall along the edge (±90°).",
+    hint: "The built rig. Box 0 (A,B) bottom-left, Box 1 (X,Y) bottom-right. Each sensor is ~40 deg wide but the pair is mounted only 25 deg apart, so each box covers ~65 deg with ~15 deg of overlap in the middle. That overlap is what gives the boolean sector solver three sectors per box instead of two.",
     s: [
-      { x: 0.00, y: 0.30, a: 45.0 },
-      { x: 0.00, y: 0.30, a: -90.0 },
-      { x: 1.50, y: 0.30, a: 90.0 },
-      { x: 1.50, y: 0.30, a: -45.0 }
+      { n: "A", x: 0.00, y: 0.30, a:  26.85, w: 40 },  // left box, aimed forward
+      { n: "B", x: 0.00, y: 0.30, a:  51.85, w: 40 },  // left box, aimed along the wall
+      { n: "X", x: 1.50, y: 0.30, a: -51.85, w: 40 },  // right box, aimed along the wall
+      { n: "Y", x: 1.50, y: 0.30, a: -26.85, w: 40 }   // right box, aimed forward
     ]
   },
   "2box": {
     name: "2 BOXES (2 SENSORS)",
     hint: "One sensor per box at the outer edges. Cheapest build; the far centre gets thin and the fit goes soft.",
     s: [
-      { x: 0.10, y: 0.30, a: 14 },
-      { x: 1.40, y: 0.30, a: -14 }
+      { n: "L", x: 0.10, y: 0.30, a: 14, w: 40 },
+      { n: "R", x: 1.40, y: 0.30, a: -14, w: 40 }
     ]
   },
   "4wide": {
     name: "4 SPLAYED",
     hint: "Outer pair splayed toward the middle. Wider usable footprint, but the beams overlap.",
     s: [
-      { x: 0.06, y: 0.30, a: 26 },
-      { x: 0.52, y: 0.30, a: 6 },
-      { x: 0.98, y: 0.30, a: -6 },
-      { x: 1.44, y: 0.30, a: -26 }
+      { n: "0", x: 0.06, y: 0.30, a: 26, w: 40 },
+      { n: "1", x: 0.52, y: 0.30, a: 6, w: 40 },
+      { n: "2", x: 0.98, y: 0.30, a: -6, w: 40 },
+      { n: "3", x: 1.44, y: 0.30, a: -26, w: 40 }
     ]
   }
 };

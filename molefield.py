@@ -80,8 +80,12 @@ def main():
         csv_writer = csv.writer(csv_file)
         csv_writer.writerow(
             ["t_s"]
-            + [f"r{i}_mm" for i in range(len(sensors))]
-            + ["x_m", "y_m", "residual_mm", "n_sensors"]
+            + [f"raw{i}_mm" for i in range(len(sensors))]
+            + [f"med{i}_mm" for i in range(len(sensors))]
+            + [
+                "x_m", "y_m", "mode", "sigma_mm", "gap_mm", "spread_mm",
+                "sector_miss_deg", "residual_mm", "veto", "n_sensors", "reason",
+            ]
         )
         print(f"  Logging telemetry frames to {args.log}")
 
@@ -143,8 +147,13 @@ def main():
         f"http://localhost:{args.http}/index.html"
         f"?src={'sim' if args.simulate else 'live'}&ws={args.ws}&layout={args.layout}"
     )
+    test_url = (
+        f"http://localhost:{args.http}/sensortest.html"
+        f"?src={'sim' if args.simulate else 'live'}&ws={args.ws}&layout={args.layout}"
+    )
     print(DIVIDER_BAR)
     print(f"  GAME CLIENT: {game_url}")
+    print(f"  SENSOR TEST: {test_url}")
     print(DIVIDER_BAR)
 
     if not args.no_open:
