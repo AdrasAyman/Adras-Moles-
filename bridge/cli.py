@@ -11,7 +11,7 @@ import time
 from typing import Sequence
 from bridge.config import DEFAULTS, LAYOUTS
 from bridge.hub import SensorHub
-from bridge.solver import solve
+from bridge.sectors import solve_sectors
 from bridge.websocket_server import WebSocketServer
 
 DIVIDER_BAR: str = "-" * 62
@@ -50,17 +50,21 @@ def status_loop(
     while not stop.is_set():
         r = hub.snapshot()
         n = sum(1 for v in r if v is not None)
-        fix = solve(r, sensors)
+        fix = solve_sectors(r, sensors)
 
         cells = " ".join(
             f"{i}:{'----' if v is None else f'{v * 1000.0:4.0f}'}"
             for i, v in enumerate(r)
         )
-        pos = (
-            f"x={fix[0]:.2f} y={fix[1]:.2f} res={fix[2] * 1000.0:3.0f}mm"
-            if fix
-            else "no fix"
-        )
+        if fix["x"] is None:
+            pos = "no fix"
+        else:
+            tag = {"two-box": "2BOX", "one-box": "1BOX"}.get(fix["mode"], fix["mode"])
+            flag = " VETO" if fix["veto"] else ""
+            pos = (
+                f"{tag} x={fix['x']:.2f} y={fix['y']:.2f} "
+                f"+-{fix['sigma'] * 1000.0:3.0f}mm gap={fix['gap'] * 1000.0:3.0f}mm{flag}"
+            )
         boxes = " ".join(
             f"box{b}:{v['hz']:4.1f}Hz{'' if v['alive'] else ' DEAD'}"
             for b, v in hub.live_boxes()

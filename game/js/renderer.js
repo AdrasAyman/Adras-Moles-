@@ -292,16 +292,37 @@ function drawStage(dt) {
     if (Tracker.stale) {
       sctx.globalAlpha = 0.35;
     }
-    sctx.strokeStyle = G.alarm ? "#FF4D3D" : "rgba(255,255,255,.9)";
+    // A one-box polar fix is a real fix but a coarse one (a couple of hundred
+    // mm rather than a couple of dozen). Draw it dashed and amber so nobody
+    // mistakes a degraded cursor for a confident one during testing.
+    const degraded = Tracker.mode === "one-box" || Tracker.veto;
+    sctx.strokeStyle = G.alarm ? "#FF4D3D"
+                     : Tracker.veto ? "#FF4D3D"
+                     : degraded ? "#FFB020"
+                     : "rgba(255,255,255,.9)";
     sctx.lineWidth = 3;
+    if (degraded) sctx.setLineDash([6, 5]);
     sctx.beginPath();
     sctx.arc(cx, cy, R, 0, 7);
     sctx.stroke();
+    sctx.setLineDash([]);
 
-    sctx.fillStyle = G.alarm ? "rgba(255,77,61,.25)" : "rgba(255,255,255,.14)";
+    sctx.fillStyle = G.alarm ? "rgba(255,77,61,.25)"
+                   : degraded ? "rgba(255,176,32,.14)"
+                   : "rgba(255,255,255,.14)";
     sctx.beginPath();
     sctx.arc(cx, cy, R, 0, 7);
     sctx.fill();
+
+    // Uncertainty halo: how far the solver thinks it could actually be.
+    if (Tracker.src !== "mouse" && isFinite(Tracker.sigma) && Tracker.sigma > 0.05) {
+      const [ex] = toPx(Tracker.pos.x + Tracker.sigma, Tracker.pos.y);
+      sctx.strokeStyle = "rgba(255,176,32,.30)";
+      sctx.lineWidth = 1.5;
+      sctx.beginPath();
+      sctx.arc(cx, cy, Math.abs(ex - cx), 0, 7);
+      sctx.stroke();
+    }
 
     sctx.beginPath();
     sctx.moveTo(cx - R * 0.45, cy);

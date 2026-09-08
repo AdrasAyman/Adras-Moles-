@@ -89,7 +89,7 @@ function drawRadar() {
     if (r != null) {
       const d = (r + AREA.bodyR) * s;
       const face = ((sen.a || 0) * Math.PI) / 180.0;
-      const half = (Sim.beam * Math.PI) / 180.0;
+      const half = (beamHalf(sen) * Math.PI) / 180.0;
 
       rctx.strokeStyle = "rgba(69,208,232,.5)";
       rctx.lineWidth = 1.5;

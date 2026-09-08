@@ -138,6 +138,43 @@ function updateHUD() {
   if (roPos) roPos.textContent = p ? `${p.x.toFixed(2)}, ${p.y.toFixed(2)} m` : "—";
   if (roDepth) roDepth.textContent = p ? `${p.y.toFixed(2)} m` : "—";
   if (roN) roN.textContent = `${Tracker.nSensors} / ${Tracker.sensors.length}`;
+<<<<<<< HEAD
+  if (roRes) roRes.textContent = Tracker.src === "mouse" ? "n/a" : `${(Tracker.res * 1000.0).toFixed(0)} mm`;
+  if (roHz) roHz.textContent = `${Tracker.hz.toFixed(0)} / ${Tracker.measHz.toFixed(1)} Hz`;
+
+  const roMode = $("#roMode");
+  const roSigma = $("#roSigma");
+  const roGap = $("#roGap");
+  const roReason = $("#roReason");
+  const MODE_LABEL = {
+    "mouse": "pointer",
+    "two-box": "two-box exact",
+    "one-box": "one-box polar (coarse)",
+    "blind": "no fix"
+  };
+  if (roMode) {
+    roMode.textContent = MODE_LABEL[Tracker.mode] || Tracker.mode;
+    roMode.style.color =
+      Tracker.veto ? "var(--alarm)" :
+      Tracker.mode === "one-box" ? "var(--amber)" :
+      Tracker.mode === "blind" ? "var(--text-dim)" : "var(--signal)";
+  }
+  if (roSigma) {
+    roSigma.textContent = (Tracker.src === "mouse" || !isFinite(Tracker.sigma))
+      ? "n/a" : `${(Tracker.sigma * 1000.0).toFixed(0)} mm`;
+  }
+  if (roGap) {
+    const g = Tracker.fix ? Tracker.fix.gap : 0;
+    roGap.textContent = Tracker.src === "mouse" ? "n/a" : `${(g * 1000.0).toFixed(0)} mm`;
+    roGap.style.color = g > SOLVER.maxGap ? "var(--alarm)" : "";
+  }
+  if (roReason) {
+    roReason.textContent = Tracker.reason || (
+      Tracker.mode === "two-box" ? "Clean two-box fix — both boxes agree." :
+      Tracker.mode === "mouse" ? "Pointer is the ground truth." : "—");
+  }
+=======
+>>>>>>> origin/main
 
   const dot = $("#stDot");
   const txt = $("#stText");
@@ -147,7 +184,13 @@ function updateHUD() {
       txt.textContent = "DEAD ZONE — alarm active";
     } else if (Tracker.stale) {
       dot.className = "dot bad";
-      txt.textContent = "No fix — fewer than 2 sensors returning";
+      txt.textContent = "No fix — no sensor is returning an echo";
+    } else if (Tracker.veto) {
+      dot.className = "dot bad";
+      txt.textContent = "Fix rejected — " + Tracker.reason;
+    } else if (Tracker.mode === "one-box" && Tracker.pos) {
+      dot.className = "dot";
+      txt.textContent = "Degraded — one box only, cursor is coarse";
     } else if (Tracker.pos) {
       dot.className = "dot ok";
       txt.textContent = "Tracking";
@@ -398,8 +441,25 @@ function initApp() {
     };
   });
 
+<<<<<<< HEAD
+  // Layout segmented buttons (4lin / 2box / 4wide)
+  document.querySelectorAll("[data-lay]").forEach(b => {
+    b.onclick = () => {
+      document.querySelectorAll("[data-lay]").forEach(o => o.setAttribute("aria-pressed", o === b));
+      Tracker.layout = b.dataset.lay;
+      Tracker.live.ranges = [];
+      Tracker.live.lastKey = "";
+      Tracker.rings = [];       // force ensureRings() to rebuild for the new count
+      Tracker.pos = null;
+      Tracker.fix = null;
+      const hint = $("#layHint");
+      if (hint) hint.textContent = LAYOUTS[Tracker.layout].hint;
+    };
+  });
+=======
   const setupConnect = $("#setupConnect");
   if (setupConnect) setupConnect.onclick = () => Setup.connect();
+>>>>>>> origin/main
 
   const btnReopenSetup = $("#btnReopenSetup");
   if (btnReopenSetup) btnReopenSetup.onclick = () => Setup.open();
@@ -430,6 +490,13 @@ function initApp() {
     apply();
   };
 
+<<<<<<< HEAD
+  bindSlider("#sNoise", "#vNoise", v => (Sim.noise = v / 1000.0), v => v + " mm");
+  bindSlider("#sDrop", "#vDrop", v => (Sim.drop = v / 100.0), v => v + " %");
+  bindSlider("#sBeam", "#vBeam", v => (Sim.beamOverride = v), v => v + "°");
+  bindSlider("#sAlpha", "#vAlpha", v => (Tracker.alpha = v / 100.0), v => (v / 100.0).toFixed(2));
+=======
+>>>>>>> origin/main
 
   (function bootFromUrl() {
     const q = new URLSearchParams(location.search);

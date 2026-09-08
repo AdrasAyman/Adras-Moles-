@@ -10,6 +10,10 @@
    Ranges are in millimetres to nearest surface (null where no echo returned).
    Telemetry fields are extensible without breaking bridge compatibility.
 
+   RANGES ARE SENT RAW AND UNSMOOTHED. All filtering now happens downstream
+   (median-of-5 in the browser). See the note in pingSensor() before adding
+   any smoothing back into this file.
+
    WHY PING SLOTS MATTER:
    Four ultrasonic sensors aimed at the same person will cross-talk if fired
    simultaneously. A receiver catching a neighbour's acoustic burst reports
@@ -37,10 +41,17 @@
 #define BOX_ID 0 // 0 or 1 — MUST differ between physical boxes
 
 // Networking Mode:
+<<<<<<< HEAD
+// true  = Standalone AP mode (Box 0 creates the WIFI_SSID network below,
+//         Box 1 and the PC join it)
+// false = External router mode (Both boxes connect to an existing Wi-Fi router)
+#define STANDALONE_AP     true
+=======
 // true  = Standalone AP mode (Box 0 creates Wi-Fi "Dylan&CO.", Box 1 & PC join
 // it) false = External router mode (Both boxes connect to an existing Wi-Fi
 // router)
 #define STANDALONE_AP true
+>>>>>>> origin/main
 
 const char *WIFI_SSID = "Molefield";
 const char *WIFI_PASS = "molefield123";
@@ -58,9 +69,17 @@ const uint8_t ECHO_PINS[N_SENSORS] = {
     35, 27}; // Sensor 1: GPIO 35, Sensor 2: GPIO 27
 
 /* ── Timing & Acoustic Constants ────────────────────────────────────────── */
+<<<<<<< HEAD
+const uint16_t SLOT_MS         = 16;    // Time window allocated per sensor (ms)
+const uint32_t ECHO_TIMEOUT_US = 14000; // 2401 mm maximum, see pingSensor()
+const float    SPEED_OF_SOUND  = 0.343; // mm per microsecond at ~20 °C
+const long     RANGE_MIN_MM    = 40;    // Below this the sensor is not honest
+const long     RANGE_MAX_MM    = 2400;  // Matches ECHO_TIMEOUT_US above
+=======
 const uint16_t SLOT_MS = 16;            // Time window allocated per sensor (ms)
 const uint32_t ECHO_TIMEOUT_US = 14000; // ~2.4 m maximum acoustic flight time
 const float SPEED_OF_SOUND = 0.343;     // mm per microsecond at ~20 °C
+>>>>>>> origin/main
 
 /* ── Battery Voltage Sensing ────────────────────────────────────────────── */
 const uint8_t VBAT_PIN = 34;    // ADC1 pin with resistor divider from battery +
@@ -70,7 +89,10 @@ const bool VBAT_ENABLED = true;
 WiFiUDP udpTx, udpSync;
 char packet[256];
 uint16_t lastSeq = 0xFFFF;
+<<<<<<< HEAD
+=======
 uint32_t lastRange[N_SENSORS] = {0};
+>>>>>>> origin/main
 
 /* ── Ultrasonic Ping Measurement ────────────────────────────────────────── */
 long pingSensor(uint8_t i) {
@@ -85,6 +107,29 @@ long pingSensor(uint8_t i) {
     return -1; // No acoustic return within maximum window
 
   long mm = (long)(us * SPEED_OF_SOUND / 2.0f);
+<<<<<<< HEAD
+
+  /* Physical sanity only. Note the real ceiling is set by ECHO_TIMEOUT_US, not
+     by an arbitrary constant: 14000 us of flight time is 2401 mm, so anything
+     beyond RANGE_MAX_MM cannot be reported by this timeout in the first place.
+     The furthest a body surface can sit from a corner box is ~2067 mm, leaving
+     roughly 14% headroom. Raising the timeout would need SLOT_MS and the sync
+     beacon rate raised with it (4 slots x 16 ms already fills the 64 ms cycle),
+     so leave the timing alone unless you re-plan the whole slot budget. */
+  if (mm < RANGE_MIN_MM || mm > RANGE_MAX_MM) return -1;
+
+  /* NO SMOOTHING HERE — DELIBERATELY.
+     This used to run a 30/70 exponential moving average, which cost ~180 ms of
+     lag (tau at the 15.6 Hz ping rate) and ~420 ms whenever the PC sync beacon
+     dropped and the box fell back to its 150 ms timer. That single line was
+     about 70% of the entire end-to-end latency budget.
+
+     Spikes are now removed by a median-of-5 in the browser (SOLVER.medianWindow
+     in game/js/config.js), which rejects a cross-talk outlier completely rather
+     than smearing 1/5th of it across the next five frames. A median needs real
+     samples to work with, so pass every physically plausible reading straight
+     through — including the ugly ones. Do not reintroduce a filter here. */
+=======
   if (mm < 40 || mm > 4000)
     return -1; // Outside honest sensor operating window
 
@@ -101,6 +146,7 @@ long pingSensor(uint8_t i) {
     mm = (mm * 3 + lastRange[i] * 7) / 10; // 30% new, 70% old
   }
   lastRange[i] = mm;
+>>>>>>> origin/main
   return mm;
 }
 
