@@ -201,12 +201,42 @@ function mainLoop(now) {
 
   const dz = $("#dz");
 
-  if (G.phase === "play") {
+  if (G.phase === "count") {
+    G.cd -= dt;
+    const n = Math.ceil(G.cd);
+
+    if (n !== G.cdShown && n > 0) {
+      G.cdShown = n;
+      showCountdown(n, "GET READY");
+      Audio_.blip(n <= 3 ? 660 : 440, 0.09, "square", 0.16);
+    }
+
+    if (G.cd <= 0) {
+      hideCountdown();
+      G.phase = "play";
+      Audio_.blip(1046, 0.22, "square", 0.2);
+      spawn();
+    }
+  } else if (G.phase === "play") {
     const L = LEVELS[G.li];
     G.t -= dt;
     if (G.t <= 0) {
       G.t = 0;
+      hideCountdown();
       endRun("Time");
+    }
+
+    // Final 5 seconds: count the round out.
+    const endN = Math.ceil(G.t);
+    if (G.t > 0 && G.t <= 5) {
+      if (endN !== G.endCdShown) {
+        G.endCdShown = endN;
+        showCountdown(endN, "TIME");
+        Audio_.blip(endN <= 3 ? 880 : 587, 0.08, "square", 0.14);
+      }
+    } else if (G.endCdShown !== -1) {
+      G.endCdShown = -1;
+      hideCountdown();
     }
 
     const inDead = Tracker.pos && Tracker.pos.y < AREA.yNear && !Tracker.stale;
@@ -285,6 +315,29 @@ function mainLoop(now) {
   requestAnimationFrame(mainLoop);
 }
 
+/* ── Level select on the start overlay ─────────────────────── */
+let pickedLevel = 0;
+
+function buildLevelPicker() {
+  const wrap = document.getElementById("lvPick");
+  if (!wrap) return;
+
+  wrap.innerHTML = LEVELS.map((L, i) => `
+    <div class="lvcard${i === pickedLevel ? " sel" : ""}" data-lv="${i}" title="${L.desc}">
+      <span class="n">${L.n}</span>
+      <span class="nm">${L.name}</span>
+      <span class="gr">${L.cols * L.rows} holes · ${L.dur}s</span>
+    </div>`).join("");
+
+  wrap.querySelectorAll(".lvcard").forEach(card => {
+    card.onclick = () => {
+      pickedLevel = +card.dataset.lv;
+      wrap.querySelectorAll(".lvcard").forEach(c => c.classList.remove("sel"));
+      card.classList.add("sel");
+    };
+  });
+}
+
 function initApp() {
   const stage = $("#stage");
   if (stage) {
@@ -320,14 +373,16 @@ function initApp() {
     }
   });
 
+  buildLevelPicker();
+
   const btnStart = $("#btnStart");
   const btnNext = $("#btnNext");
   const btnAgain = $("#btnAgain");
   const btnResume = $("#btnResume");
 
-  if (btnStart) btnStart.onclick = () => { Audio_.init(); hideAllOverlays(); resetRun(); };
+  if (btnStart) btnStart.onclick = () => { Audio_.init(); hideAllOverlays(); resetRun(pickedLevel); };
   if (btnNext) btnNext.onclick = () => { hideAllOverlays(); startLevel(G.li + 1); };
-  if (btnAgain) btnAgain.onclick = () => { hideAllOverlays(); resetRun(); };
+  if (btnAgain) btnAgain.onclick = () => { hideAllOverlays(); resetRun(pickedLevel); };
   if (btnResume) btnResume.onclick = () => { hideAllOverlays(); G.phase = "play"; };
 
   document.querySelectorAll("[data-src]").forEach(b => {
@@ -351,7 +406,7 @@ function initApp() {
 
   const btnSetupDone = $("#btnSetupDone");
   if (btnSetupDone) {
-    btnSetupDone.onclick = () => { Audio_.init(); hideAllOverlays(); resetRun(); };
+    btnSetupDone.onclick = () => { Audio_.init(); hideAllOverlays(); resetRun(pickedLevel); };
   }
 
   const btnSetupSkip = $("#btnSetupSkip");
@@ -375,7 +430,6 @@ function initApp() {
     apply();
   };
 
-  
 
   (function bootFromUrl() {
     const q = new URLSearchParams(location.search);

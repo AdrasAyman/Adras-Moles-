@@ -41,6 +41,7 @@
       <div id="stagewrap">
         <canvas id="stage"></canvas>
         <div id="dz"><div id="dzmsg">STEP BACK</div></div>
+        <div id="cd" hidden><div id="cdnum">5</div><div id="cdlab">GET READY</div></div>
 
         <!-- Overlays -->
         <div class="overlay" id="ovStart">
@@ -54,6 +55,9 @@
             <div><b>P</b>pause</div>
             <div><b>M</b>mute</div>
           </div>
+          <div class="lvpick-label">Select a level</div>
+          <div class="lvpick" id="lvPick"></div>
+
           <button class="cta" id="btnStart">Start round</button>
           <p style="font-size:0.7rem">Sound is on. Everything runs offline in zero dependencies.</p>
         </div>
@@ -131,8 +135,6 @@
             <button class="cta ghost" id="btnReopenSetup" style="width:100%;margin-top:0.4rem;padding:0.4rem;font-size:0.7rem">Setup / reconnect sensors</button>
           </div>
         </div>
-
-        
 
         <div class="sec">
           <h2>Sensor layout</h2>

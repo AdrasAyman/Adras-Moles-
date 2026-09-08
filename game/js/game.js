@@ -6,7 +6,7 @@
    ══════════════════════════════════════════════════════════════ */
 
 const G = {
-  phase: "start", // "start" | "play" | "levelup" | "over" | "pause"
+  phase: "start", // "start" | "count" | "play" | "levelup" | "over" | "pause"
   li: 0,
   score: 0,
   streak: 1,
@@ -20,6 +20,9 @@ const G = {
   dwellTarget: null,
   alarm: false,
   alarmT: 0,
+  cd: 0,
+  cdShown: -1,
+  endCdShown: -1,
   totalHits: 0,
   totalShown: 0,
   bestStreak: 1
@@ -54,18 +57,47 @@ function startLevel(i) {
   G.dwell = 0;
   G.dwellTarget = null;
   buildHoles();
-  G.phase = "play";
-  spawn();
+
+  // Hold the round in a 5-second countdown before play begins.
+  G.cd = 5.0;
+  G.cdShown = -1;
+  G.endCdShown = -1;
+  G.phase = "count";
+  showCountdown(5, "GET READY");
 }
 
-function resetRun() {
+/* \u2500\u2500 Countdown display \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 */
+function showCountdown(n, label) {
+  const cd = document.getElementById("cd");
+  const num = document.getElementById("cdnum");
+  const lab = document.getElementById("cdlab");
+  if (!cd || !num) return;
+
+  num.textContent = n;
+  if (lab) lab.textContent = label || "";
+  cd.hidden = false;
+
+  // Restart the pop animation on every tick.
+  num.classList.remove("tick");
+  void num.offsetWidth;
+  num.classList.add("tick");
+
+  cd.classList.toggle("final", n <= 3);
+}
+
+function hideCountdown() {
+  const cd = document.getElementById("cd");
+  if (cd) cd.hidden = true;
+}
+
+function resetRun(startAt = 0) {
   G.score = 0;
   G.streak = 1;
   G.missed = 0;
   G.totalHits = 0;
   G.totalShown = 0;
   G.bestStreak = 1;
-  startLevel(0);
+  startLevel(Math.max(0, Math.min(startAt, LEVELS.length - 1)));
 }
 
 function spawn() {
@@ -139,6 +171,7 @@ function hit(m) {
 }
 
 function levelComplete() {
+  hideCountdown();
   if (G.li >= LEVELS.length - 1) {
     endRun("You cleared every level");
     return;
@@ -162,6 +195,7 @@ function levelComplete() {
 }
 
 function endRun(title) {
+  hideCountdown();
   G.phase = "over";
   Audio_.over();
   Audio_.alarmOff();

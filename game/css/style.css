@@ -757,3 +757,115 @@ footer .spacer {
   }
 }
   
+/* ── Level Select (start overlay) ───────────────────────────── */
+.lvpick-label {
+  font: 600 0.6rem/1 var(--mono);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.lvpick {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  justify-content: center;
+  max-width: min(90vw, 640px);
+}
+
+.lvcard {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 0.55rem 0.9rem;
+  min-width: 6.5rem;
+  cursor: pointer;
+  text-align: center;
+  color: var(--text-dim);
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+
+.lvcard:hover {
+  border-color: var(--signal);
+  background: var(--panel-2);
+}
+
+.lvcard .n {
+  display: block;
+  font: 700 1.5rem/1 var(--display);
+  color: #E6EDF3;
+}
+
+.lvcard .nm {
+  display: block;
+  font: 500 0.6rem/1.4 var(--mono);
+  letter-spacing: 0.05em;
+  margin-top: 0.15rem;
+}
+
+.lvcard .gr {
+  display: block;
+  font: 500 0.55rem/1.4 var(--mono);
+  color: var(--line);
+  margin-top: 0.1rem;
+}
+
+.lvcard.sel {
+  border-color: var(--signal);
+  background: var(--panel-2);
+}
+
+.lvcard.sel .n,
+.lvcard.sel .nm {
+  color: var(--signal);
+}
+
+/* ── Round Countdown ────────────────────────────────────────── */
+#cd {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+}
+
+#cd[hidden] {
+  display: none;
+}
+
+#cdnum {
+  font: 700 clamp(5rem, 22vw, 14rem)/1 var(--display);
+  color: var(--signal);
+  text-shadow: 0 0 40px rgba(155, 232, 107, 0.45);
+  line-height: 1;
+}
+
+#cdlab {
+  font: 600 0.72rem/1 var(--mono);
+  letter-spacing: 0.45em;
+  text-indent: 0.45em;
+  color: var(--text-dim);
+}
+
+#cd.final #cdnum {
+  color: var(--alarm);
+  text-shadow: 0 0 40px rgba(255, 77, 61, 0.45);
+}
+
+#cdnum.tick {
+  animation: cdpop 0.42s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes cdpop {
+  0%   { transform: scale(1.7); opacity: 0; }
+  35%  { transform: scale(1);   opacity: 1; }
+  100% { transform: scale(1);   opacity: 0.85; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #cdnum.tick { animation: none; }
+}
