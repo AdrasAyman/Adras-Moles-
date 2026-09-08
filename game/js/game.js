@@ -28,15 +28,84 @@ const G = {
   bestStreak: 1
 };
 
+// function buildHoles() {
+//   const L = LEVELS[G.li];
+//   G.holes = [];
+//   const mx = 0.16, my = 0.16; // Margins in normalized play-field units
+
+//   for (let r = 0; r < L.rows; r++) {
+//     for (let c = 0; c < L.cols; c++) {
+//       const u = L.cols === 1 ? 0.5 : mx + (c / (L.cols - 1)) * (1.0 - 2.0 * mx);
+//       const v = L.rows === 1 ? 0.5 : my + (r / (L.rows - 1)) * (1.0 - 2.0 * my);
+//       G.holes.push({
+//         u,
+//         v,
+//         x: u * AREA.w,
+//         y: AREA.yNear + v * AREA.deep,
+//         occupied: null
+//       });
+//     }
+//   }
+// }
+
 function buildHoles() {
   const L = LEVELS[G.li];
   G.holes = [];
-  const mx = 0.16, my = 0.16; // Margins in normalized play-field units
 
+  const mx = 0.16;
+  const my = 0.16;
+
+  // Random holes for levels that have randomHoles enabled
+  if (L.randomHoles) {
+    const total = L.cols * L.rows;
+
+    for (let i = 0; i < total; i++) {
+      let u, v;
+      let valid = false;
+
+      // Keep generating a position until it is far enough
+      // away from all existing holes
+      while (!valid) {
+        u = mx + Math.random() * (1.0 - 2.0 * mx);
+        v = my + Math.random() * (1.0 - 2.0 * my);
+
+        valid = true;
+
+        for (const h of G.holes) {
+          const dx = u - h.u;
+          const dy = v - h.v;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+
+          if (distance < 0.18) {
+            valid = false;
+            break;
+          }
+        }
+      }
+
+      G.holes.push({
+        u,
+        v,
+        x: u * AREA.w,
+        y: AREA.yNear + v * AREA.deep,
+        occupied: null
+      });
+    }
+
+    return;
+  }
+
+  // Normal grid for levels without randomHoles
   for (let r = 0; r < L.rows; r++) {
     for (let c = 0; c < L.cols; c++) {
-      const u = L.cols === 1 ? 0.5 : mx + (c / (L.cols - 1)) * (1.0 - 2.0 * mx);
-      const v = L.rows === 1 ? 0.5 : my + (r / (L.rows - 1)) * (1.0 - 2.0 * my);
+      const u = L.cols === 1
+        ? 0.5
+        : mx + (c / (L.cols - 1)) * (1.0 - 2.0 * mx);
+
+      const v = L.rows === 1
+        ? 0.5
+        : my + (r / (L.rows - 1)) * (1.0 - 2.0 * my);
+
       G.holes.push({
         u,
         v,

@@ -122,7 +122,7 @@ const LEVELS = [
   {
     n: 5,
     name: "Endurance",
-    cols: 5,
+    cols: 4,
     rows: 3,
     life: 2.50,
     dwell: 0.3,
@@ -131,6 +131,7 @@ const LEVELS = [
     dur: 30,
     bombs: true,
     gold: true,
+    randomHoles: true,
     desc: "Fifteen holes, one minute, no mercy. This is the run you demo in week 13."
   }
 ];
