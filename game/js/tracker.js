@@ -38,6 +38,7 @@ const Tracker = {
   frames: 0,
   hzT: 0,
   measCount: 0,
+  measSeq: 0,
   measT: 0,
   stale: false,
   wsState: "closed",  // read by the setup wizard (setup.js)
@@ -83,6 +84,7 @@ const Tracker = {
     }
     this.ranges = this.rings.map(r => r.value());
     this.measCount++;
+    this.measSeq++;     // monotonic: lets observers (telemetry.js) spot new data
   },
 
   /** Per-sensor echo rate over the median window, for the HUD and test page. */
@@ -252,6 +254,7 @@ const Tracker = {
         // Per-box health from bridge/pipeline.py — the setup wizard needs this.
         // Captured before anything below can return early on a health-only frame.
         if (Array.isArray(m.boxes)) this.live.boxes = m.boxes;
+        if (m.hub && typeof m.hub === "object") this.live.hub = m.hub;   // packet counters
 
         this.ensureRings();
         const n = this.sensors.length;

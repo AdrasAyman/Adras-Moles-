@@ -879,3 +879,19 @@ footer .spacer {
   font-size: 0.66rem;
   white-space: nowrap;
 }
+
+/* ── Telemetry recorder badge (header, next to LOGS) ───────── */
+.recbox { display: flex; align-items: center; gap: 0.35rem; }
+.rec {
+  display: inline-flex; align-items: center; gap: 0.35rem;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 2px;
+  color: var(--text-dim); font: 600 0.58rem/1 var(--mono); letter-spacing: 0.08em;
+  padding: 0.42rem 0.5rem; white-space: nowrap; min-width: 5.6rem;
+}
+.rec:hover { border-color: var(--text-dim); }
+.recdot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-dim); flex: none; }
+.recdot.rec { background: var(--alarm); animation: recpulse 1.6s ease-in-out infinite; }
+.recdot.offline { background: var(--amber); }
+.recdot.paused { background: transparent; box-shadow: inset 0 0 0 1.5px var(--text-dim); }
+@keyframes recpulse { 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) { .recdot.rec { animation: none; } }

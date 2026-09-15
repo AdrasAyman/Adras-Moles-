@@ -51,6 +51,7 @@ def pump(
             "t": int((time.monotonic() - t0) * 1000),
             "ranges": [None if v is None else round(v * 1000) for v in r],
             "boxes": hub.health(),
+            "hub": {"frames": hub.frames, "bad": hub.bad},
         }
         ws.broadcast(json.dumps(frame_payload))
 

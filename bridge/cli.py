@@ -143,6 +143,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="write every frame to CSV",
     )
     parser.add_argument(
+        "--db",
+        metavar="FILE",
+        default="",
+        help="telemetry database for logs.html; empty means logs/molefield.db",
+    )
+    parser.add_argument(
         "--no-open",
         action="store_true",
         help="do not open a browser automatically",

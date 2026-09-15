@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MOLEFIELD — Session Logs</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/logs.css">
+</head>
+<body>
+  <div id="logsapp">
+    <header>
+      <div class="hcell">
+        <div id="brand">SESSION LOGS<small>TELEMETRY HISTORY</small></div>
+      </div>
+      <div class="hcell">
+        <div class="k">Sessions</div>
+        <div class="v" id="hSessions" style="font-size:0.95rem">—</div>
+      </div>
+      <div class="hcell">
+        <div class="k">Recorded samples</div>
+        <div class="v" id="hSamples" style="font-size:0.95rem">—</div>
+      </div>
+      <div class="hcell wide">
+        <div class="k">Database</div>
+        <div class="v" id="hDb" style="font-size:0.66rem;font-family:var(--mono);letter-spacing:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">—</div>
+      </div>
+      <div class="hcell" style="justify-content:center">
+        <div class="recbox">
+          <a class="cta ghost navlink" href="index.html">GAME</a>
+          <a class="cta ghost navlink" href="sensortest.html">SENSOR TEST</a>
+        </div>
+      </div>
+    </header>
+
+    <main id="logsmain">
+      <aside id="sessside" aria-label="Sessions">
+        <div class="filters" role="group" aria-label="Filter sessions">
+          <input type="search" id="fSearch" placeholder="Search label or notes" aria-label="Search label or notes">
+          <select id="fPage" aria-label="Page">
+            <option value="">All pages</option>
+            <option value="game">Game</option>
+            <option value="bench">Sensor test</option>
+          </select>
+          <select id="fSrc" aria-label="Source">
+            <option value="">All sources</option>
+            <option value="live">Live</option>
+            <option value="sim">Simulated</option>
+            <option value="mouse">Mouse</option>
+          </select>
+          <label><input type="checkbox" id="fShort" checked> Hide under 10 s</label>
+        </div>
+        <div class="sesslist" id="sessList"></div>
+      </aside>
+
+      <section id="content" aria-live="polite">
+        <div class="tabs" role="tablist">
+          <button role="tab" id="tabSession" aria-selected="true">Session</button>
+          <button role="tab" id="tabTrends" aria-selected="false">Trends across sessions</button>
+        </div>
+        <div id="viewSession"></div>
+        <div id="viewTrends" hidden></div>
+      </section>
+    </main>
+  </div>
+
+  <script src="js/charts.js"></script>
+  <script src="js/logs.js"></script>
+</body>
+</html>

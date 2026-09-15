@@ -19,6 +19,9 @@ Adras-Moles-/
 │   ├── config.py             # Geometries, beam widths, solver tuning & defaults
 │   ├── hub.py                # SensorHub datagram merger & staleness tracker
 │   ├── sectors.py            # Boolean sector model & closed-form solver
+│   ├── telemetry_db.py       # SQLite session store (samples + events)
+│   ├── telemetry_api.py      # /api/ endpoints for recording & the logs page
+│   ├── analysis.py           # Session summaries, chart series, trends
 │   ├── solver.py             # LEGACY least-squares solver (comparison only)
 │   ├── simulator.py          # Synthetic walker kinematics & beam model
 │   ├── websocket_server.py   # RFC 6455 WebSocket streaming server
@@ -29,9 +32,11 @@ Adras-Moles-/
 ├── game/                     # Browser game client (zero dependencies)
 │   ├── index.html            # Clean semantic HTML markup
 │   ├── sensortest.html       # Triangulation test bench (cones & calibration)
+│   ├── logs.html             # Session history, charts, trends & exports
 │   ├── css/
 │   │   ├── style.css         # UI design system, radar & stage styles
-│   │   └── sensortest.css    # Test bench layout
+│   │   ├── sensortest.css    # Test bench layout
+│   │   └── logs.css          # Logs page layout & chart colour roles
 │   └── js/
 │       ├── config.js         # Play area, beam model & solver tuning
 │       ├── audio.js          # Web Audio procedural sound synthesizer
@@ -42,6 +47,9 @@ Adras-Moles-/
 │       ├── radar.js          # Top-down radar & sensor arcs view
 │       ├── game.js           # Whack-a-Mole rules, spawning & scoring
 │       ├── sensortest.js     # Test bench: cones, calibration, diagnostics
+│       ├── telemetry.js      # Records samples, game events & anomalies
+│       ├── charts.js         # Dependency-free canvas charts for logs.html
+│       ├── logs.js           # Logs page: history, session report, trends
 │       └── app.js            # HUD updates, UI bindings & animation loop
 │
 ├── firmware/                 # ESP32 sensor hardware sketch
@@ -187,6 +195,72 @@ It exists to answer the three questions the game itself cannot:
 Set *Sim beam width* away from 40° to sense at one width while the solver still
 assumes the calibrated one. Watch the veto rate climb — that is the sector logic
 detecting that its angular model no longer matches reality.
+
+## Session Logs & Telemetry
+
+Every visit to the game or the sensor test bench is recorded automatically while the
+bridge is running. Open **LOGS** in either page's header, or
+`http://localhost:8000/logs.html`.
+
+The database is `logs/molefield.db` (SQLite, git-ignored). Use `--db FILE` to point
+the bridge somewhere else. Recording can be paused with the **REC** badge next to LOGS.
+A new session starts whenever the position source or sensor layout changes, so each
+session is one consistent setup.
+
+### What gets recorded
+**Samples**, one per sensor measurement (~15.6 Hz; ~15 Hz from the pointer in mouse
+mode, dropping to 1 Hz when nobody is using the page):
+
+| Group | Columns |
+|---|---|
+| Sensors | `r0`–`r3` raw range (mm), `m0`–`m3` median-filtered range (mm) |
+| Solver | `mode`, `sigma` (mm), `gap` (mm), `spread` (mm), `miss` (deg), `resid` (mm), `veto`, `split`, `conflict`, `gate` |
+| Position | `x_raw`/`y_raw` solver fix, `x`/`y` filtered cursor, `tx`/`ty` ground truth (m) |
+| System | `src`, `stale`, `meas_hz`, `fps`, `boxes_alive` |
+| Game | `phase`, `score`, `level`, `alarm` |
+
+Ground truth is known on the sensor test bench: the truth marker, or the pointer in
+simulated mode. That is what makes the "error against ground truth" numbers possible.
+
+**Events**, in four categories:
+- **game**: `round_start`, `play_start`, `spawn`, `hit` (reaction time, cursor-to-hole
+  distance, solver mode at the moment of the hit), `escape`, `level_complete`, `run_end`,
+  `pause`/`resume`, `deadzone_enter`/`deadzone_exit`
+- **anomaly**: see below
+- **calibration**: `capture_start`/`capture_done`, `fit` (before/after aim and width
+  per sensor), `tune`, `truth_set`, `export_csv`
+- **system**: `session_start`, `ws_state`, `box_up`, `tab_hidden`/`tab_visible`, `page_hide`
+
+### Anomaly definitions
+| Anomaly | Detected when |
+|---|---|
+| Range spike | A raw reading is more than 300 mm from that sensor's own median |
+| Sensor dropout | A sensor that had been echoing is silent for 5+ measurements (~320 ms) |
+| No fix | No sensor returns an echo |
+| Solver veto | Circles fail to intersect, or the fix leaves a firing sensor's cone |
+| Pair disagreement | Co-located sensors disagree by more than 250 mm |
+| Sector conflict | The set of firing sensors is impossible under the cone calibration |
+| Position jump | The raw fix moves more than 0.6 m between measurements |
+| Velocity gate | The tracker rejects movement faster than 4 m/s |
+| Stale data | Live frames stop for more than 400 ms |
+| Low measurement rate | Under 10 measurements/s for over 2 s |
+| Low render rate | Under 30 fps for over 2 s |
+| Box offline | The bridge stops hearing from a sensor box |
+| Bad packets | The bridge receives datagrams it can't parse |
+
+### The logs page
+- **Session list**, filterable by page, source and length, and searchable by label and notes
+- **Session report**: headline figures, sensor ranges over time, echo rates, range
+  distributions, solve modes, uncertainty, circle gap, error against ground truth, a
+  heat map of where the player stood (with hits and escapes), score, reaction times,
+  per-level results, anomaly and game timelines, and a full filterable event log
+- **Trends across sessions**: two-box share, uncertainty, veto rate, anomalies per
+  minute, measurement rate, catch rate, reaction time and best score, session by session
+
+Every chart has **TABLE** (the numbers behind it) and **PNG** (a titled image for a
+report). Each session also exports **Samples CSV**, **Events CSV** and **Summary JSON**,
+and **Copy summary** puts a plain-text summary on the clipboard. Label and notes
+fields are saved with the session.
 
 ## Network Protocol
 
