@@ -388,7 +388,7 @@ function solveSectors(ranges, sensors, opts) {
       } else if (worstMiss > SOLVER.sectorTolDeg) {
         result.veto = true;
         result.sigma = Math.max(result.sigma, best.dA * Math.sin(worstMiss * DEG));
-        result.reason = "fix sits " + worstMiss.toFixed(1) + " deg outside box " + worstBox +
+        result.reason = "fix sits " + worstMiss.toFixed(1) + " deg outside box " + (worstBox + 1) +
                         "'s cone — check the aim / width calibration";
       } else if (result.split) {
         result.reason = "box pair disagreed by " + (result.spread * 1000).toFixed(0) +
@@ -419,8 +419,8 @@ function solveSectors(ranges, sensors, opts) {
     result.sigma = Math.max(0.05, pick.d * Math.sin((pick.sec.width / 2.0) * DEG));
     result.residual = 0;
     result.reason = wasVetoed
-      ? result.reason + " — fell back to box " + pick.box.id + " polar fix"
-      : "only box " + pick.box.id + " has line of sight";
+      ? result.reason + " — fell back to box " + (pick.box.id + 1) + " polar fix"
+      : "only box " + (pick.box.id + 1) + " has line of sight";
     return result;
   }
 

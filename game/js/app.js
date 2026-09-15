@@ -138,9 +138,6 @@ function updateHUD() {
   if (roPos) roPos.textContent = p ? `${p.x.toFixed(2)}, ${p.y.toFixed(2)} m` : "—";
   if (roDepth) roDepth.textContent = p ? `${p.y.toFixed(2)} m` : "—";
   if (roN) roN.textContent = `${Tracker.nSensors} / ${Tracker.sensors.length}`;
-<<<<<<< HEAD
-  if (roRes) roRes.textContent = Tracker.src === "mouse" ? "n/a" : `${(Tracker.res * 1000.0).toFixed(0)} mm`;
-  if (roHz) roHz.textContent = `${Tracker.hz.toFixed(0)} / ${Tracker.measHz.toFixed(1)} Hz`;
 
   const roMode = $("#roMode");
   const roSigma = $("#roSigma");
@@ -173,8 +170,6 @@ function updateHUD() {
       Tracker.mode === "two-box" ? "Clean two-box fix — both boxes agree." :
       Tracker.mode === "mouse" ? "Pointer is the ground truth." : "—");
   }
-=======
->>>>>>> origin/main
 
   const dot = $("#stDot");
   const txt = $("#stText");
@@ -441,25 +436,8 @@ function initApp() {
     };
   });
 
-<<<<<<< HEAD
-  // Layout segmented buttons (4lin / 2box / 4wide)
-  document.querySelectorAll("[data-lay]").forEach(b => {
-    b.onclick = () => {
-      document.querySelectorAll("[data-lay]").forEach(o => o.setAttribute("aria-pressed", o === b));
-      Tracker.layout = b.dataset.lay;
-      Tracker.live.ranges = [];
-      Tracker.live.lastKey = "";
-      Tracker.rings = [];       // force ensureRings() to rebuild for the new count
-      Tracker.pos = null;
-      Tracker.fix = null;
-      const hint = $("#layHint");
-      if (hint) hint.textContent = LAYOUTS[Tracker.layout].hint;
-    };
-  });
-=======
   const setupConnect = $("#setupConnect");
   if (setupConnect) setupConnect.onclick = () => Setup.connect();
->>>>>>> origin/main
 
   const btnReopenSetup = $("#btnReopenSetup");
   if (btnReopenSetup) btnReopenSetup.onclick = () => Setup.open();
@@ -490,13 +468,6 @@ function initApp() {
     apply();
   };
 
-<<<<<<< HEAD
-  bindSlider("#sNoise", "#vNoise", v => (Sim.noise = v / 1000.0), v => v + " mm");
-  bindSlider("#sDrop", "#vDrop", v => (Sim.drop = v / 100.0), v => v + " %");
-  bindSlider("#sBeam", "#vBeam", v => (Sim.beamOverride = v), v => v + "°");
-  bindSlider("#sAlpha", "#vAlpha", v => (Tracker.alpha = v / 100.0), v => (v / 100.0).toFixed(2));
-=======
->>>>>>> origin/main
 
   (function bootFromUrl() {
     const q = new URLSearchParams(location.search);

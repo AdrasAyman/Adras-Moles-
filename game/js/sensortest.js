@@ -702,7 +702,7 @@ function updateSidebar() {
         const val = !sec ? "silent"
           : `${sec.lo.toFixed(1)}° … ${sec.hi.toFixed(1)}°  (${sec.width.toFixed(1)}° wide)`;
         const cls = !sec ? "" : sec.conflict ? "bad" : sec.width <= 20 ? "ok" : "";
-        return `<div class="kv"><span>Box ${bi.box.id} &nbsp;${names}</span>` +
+        return `<div class="kv"><span>Box ${bi.box.id + 1} &nbsp;${names}</span>` +
                `<span class="${cls}">${val}</span></div>`;
       }).join("");
     }

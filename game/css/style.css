@@ -756,7 +756,6 @@ footer .spacer {
     transition: none !important;
   }
 }
-<<<<<<< HEAD
 
 /* ── Cross-page nav link (header "SENSOR TEST") ─────────────── */
 .navlink {
@@ -767,7 +766,6 @@ footer .spacer {
   font-size: 0.66rem;
   white-space: nowrap;
 }
-=======
   
 /* ── Level Select (start overlay) ───────────────────────────── */
 .lvpick-label {
@@ -881,4 +879,3 @@ footer .spacer {
 @media (prefers-reduced-motion: reduce) {
   #cdnum.tick { animation: none; }
 }
->>>>>>> origin/main

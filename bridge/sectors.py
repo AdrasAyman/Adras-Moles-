@@ -387,7 +387,7 @@ def solve_sectors(
                     result["sigma"], best["dA"] * math.sin(math.radians(worst_miss))
                 )
                 result["reason"] = (
-                    f"fix sits {worst_miss:.1f} deg outside box {worst_box}'s cone"
+                    f"fix sits {worst_miss:.1f} deg outside box {worst_box + 1}'s cone"
                     " - check the aim / width calibration"
                 )
             elif result["split"]:
@@ -417,9 +417,9 @@ def solve_sectors(
         )
         result["residual"] = 0.0
         if was_vetoed:
-            result["reason"] += f" - fell back to box {pick['box']['id']} polar fix"
+            result["reason"] += f" - fell back to box {pick['box']['id'] + 1} polar fix"
         else:
-            result["reason"] = f"only box {pick['box']['id']} has line of sight"
+            result["reason"] = f"only box {pick['box']['id'] + 1} has line of sight"
         return result
 
     result["mode"] = "blind"

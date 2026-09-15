@@ -56,59 +56,30 @@ const LAYOUTS = {
     name: "4 IN LINE",
     hint: "Two boxes, two sensors each, evenly spread in a straight line across the wall.",
     s: [
-<<<<<<< HEAD
-      { n: "0", x: 0.19, y: 0.30, a: 0, w: 40 },
-      { n: "1", x: 0.56, y: 0.30, a: 0, w: 40 },
-      { n: "2", x: 0.94, y: 0.30, a: 0, w: 40 },
-      { n: "3", x: 1.31, y: 0.30, a: 0, w: 40 }
-=======
-      { x: 0.19, y: 0.30, a: 0, box: 1, slot: 1 },
-      { x: 0.56, y: 0.30, a: 0, box: 1, slot: 2 },
-      { x: 0.94, y: 0.30, a: 0, box: 2, slot: 1 },
-      { x: 1.31, y: 0.30, a: 0, box: 2, slot: 2 }
->>>>>>> origin/main
+      { n: "0", x: 0.19, y: 0.30, a: 0, w: 40, box: 1, slot: 1 },
+      { n: "1", x: 0.56, y: 0.30, a: 0, w: 40, box: 1, slot: 2 },
+      { n: "2", x: 0.94, y: 0.30, a: 0, w: 40, box: 2, slot: 1 },
+      { n: "3", x: 1.31, y: 0.30, a: 0, w: 40, box: 2, slot: 2 }
     ]
   },
   "2box4s": {
     name: "2 CORNER BOXES (4 SENSORS)",
-    hint: "The built rig. Box 0 (A,B) bottom-left, Box 1 (X,Y) bottom-right. Each sensor is ~40 deg wide but the pair is mounted only 25 deg apart, so each box covers ~65 deg with ~15 deg of overlap in the middle. That overlap is what gives the boolean sector solver three sectors per box instead of two.",
+    hint: "The built rig. Box 1 (A,B) bottom-left, Box 2 (X,Y) bottom-right. Each sensor is ~40 deg wide but the pair is mounted only 25 deg apart, so each box covers ~65 deg with ~15 deg of overlap in the middle. That overlap is what gives the boolean sector solver three sectors per box instead of two.",
     s: [
-<<<<<<< HEAD
-      { n: "A", x: 0.00, y: 0.30, a:  26.85, w: 40 },  // left box, aimed forward
-      { n: "B", x: 0.00, y: 0.30, a:  51.85, w: 40 },  // left box, aimed along the wall
-      { n: "X", x: 1.50, y: 0.30, a: -51.85, w: 40 },  // right box, aimed along the wall
-      { n: "Y", x: 1.50, y: 0.30, a: -26.85, w: 40 }   // right box, aimed forward
-    ]
-  },
-  "2box": {
-    name: "2 BOXES (2 SENSORS)",
-    hint: "One sensor per box at the outer edges. Cheapest build; the far centre gets thin and the fit goes soft.",
-    s: [
-      { n: "L", x: 0.10, y: 0.30, a: 14, w: 40 },
-      { n: "R", x: 1.40, y: 0.30, a: -14, w: 40 }
-=======
-      { x: 0.00, y: 0.30, a: 45.0, box: 1, slot: 1 },
-      { x: 0.00, y: 0.30, a: -90.0, box: 1, slot: 2 },
-      { x: 1.50, y: 0.30, a: 90.0, box: 2, slot: 1 },
-      { x: 1.50, y: 0.30, a: -45.0, box: 2, slot: 2 }
->>>>>>> origin/main
+      { n: "A", x: 0.00, y: 0.30, a:  26.85, w: 40, box: 1, slot: 1 },  // left box, aimed forward
+      { n: "B", x: 0.00, y: 0.30, a:  51.85, w: 40, box: 1, slot: 2 },  // left box, aimed along the wall
+      { n: "X", x: 1.50, y: 0.30, a: -51.85, w: 40, box: 2, slot: 1 },  // right box, aimed along the wall
+      { n: "Y", x: 1.50, y: 0.30, a: -26.85, w: 40, box: 2, slot: 2 }   // right box, aimed forward
     ]
   },
   "4wide": {
     name: "4 SPLAYED",
     hint: "Outer pair splayed toward the middle. Wider usable footprint, but the beams overlap.",
     s: [
-<<<<<<< HEAD
-      { n: "0", x: 0.06, y: 0.30, a: 26, w: 40 },
-      { n: "1", x: 0.52, y: 0.30, a: 6, w: 40 },
-      { n: "2", x: 0.98, y: 0.30, a: -6, w: 40 },
-      { n: "3", x: 1.44, y: 0.30, a: -26, w: 40 }
-=======
-      { x: 0.06, y: 0.30, a: 26, box: 1, slot: 1 },
-      { x: 0.52, y: 0.30, a: 6, box: 1, slot: 2 },
-      { x: 0.98, y: 0.30, a: -6, box: 2, slot: 1 },
-      { x: 1.44, y: 0.30, a: -26, box: 2, slot: 2 }
->>>>>>> origin/main
+      { n: "0", x: 0.06, y: 0.30, a: 26, w: 40, box: 1, slot: 1 },
+      { n: "1", x: 0.52, y: 0.30, a: 6, w: 40, box: 1, slot: 2 },
+      { n: "2", x: 0.98, y: 0.30, a: -6, w: 40, box: 2, slot: 1 },
+      { n: "3", x: 1.44, y: 0.30, a: -26, w: 40, box: 2, slot: 2 }
     ]
   }
 };
