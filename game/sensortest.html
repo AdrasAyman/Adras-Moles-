@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MOLEFIELD — Sensor Test Bench</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/sensortest.css">
+</head>
+<body>
+  <div id="stapp">
+
+    <header>
+      <div class="hcell">
+        <div id="brand">SENSOR TEST<small>TRIANGULATION BENCH</small></div>
+      </div>
+      <div class="hcell">
+        <div class="k">Mode</div>
+        <div class="v" id="hMode" style="font-size:0.95rem">—</div>
+      </div>
+      <div class="hcell">
+        <div class="k">Echoes</div>
+        <div class="v" id="hEch" style="font-size:0.95rem">0 / 4</div>
+      </div>
+      <div class="hcell">
+        <div class="k">Measure rate</div>
+        <div class="v" id="hHz" style="font-size:0.95rem">— Hz</div>
+      </div>
+      <div class="hcell wide">
+        <div class="k">Solver says</div>
+        <div class="v" id="hReason" style="font-size:0.7rem;font-family:var(--mono);letter-spacing:0">—</div>
+      </div>
+      <div class="hcell" style="justify-content:center">
+        <a class="cta ghost navlink" href="index.html">◀ BACK TO GAME</a>
+      </div>
+    </header>
+
+    <div id="stmain">
+
+      <!-- ── Field view ───────────────────────────────────────── -->
+      <div id="fieldwrap">
+        <div class="chips">
+          <button class="chip" data-layer="cones" aria-pressed="true">Cones</button>
+          <button class="chip" data-layer="arcs" aria-pressed="true">Range arcs</button>
+          <button class="chip" data-layer="sectors" aria-pressed="true">Active sector</button>
+          <button class="chip" data-layer="cands" aria-pressed="true">Candidates</button>
+          <button class="chip" data-layer="legacy" aria-pressed="false">Old solver</button>
+          <button class="chip" data-layer="samples" aria-pressed="true">Cal samples</button>
+          <button class="chip warn" data-layer="heat" aria-pressed="false">Coverage map</button>
+          <button class="chip" data-layer="grid" aria-pressed="true">Grid</button>
+        </div>
+
+        <div id="fieldbox"><canvas id="field"></canvas></div>
+
+        <div id="fieldfoot">
+          <span>Pointer <b id="fPtr">—</b></span>
+          <span>Truth marker <b id="fTruth">not set</b></span>
+          <span>Fix <b id="fFix">—</b></span>
+          <span>Error vs truth <b id="fErr">—</b></span>
+          <span style="color:var(--text-dim)">click = place truth marker · <b>C</b> capture · <b>X</b> clear marker</span>
+        </div>
+      </div>
+
+      <!-- ── Instrumentation sidebar ──────────────────────────── -->
+      <aside id="stside">
+
+        <div class="sec">
+          <h2>Source</h2>
+          <div class="seg" role="group">
+            <button data-src="mouse" aria-pressed="true">MOUSE</button>
+            <button data-src="sim" aria-pressed="false">SIMULATED</button>
+            <button data-src="live" aria-pressed="false">LIVE</button>
+          </div>
+          <p class="hint" id="stSrcHint" style="margin-top:0.5rem"></p>
+          <div class="field" id="stWsField" hidden>
+            <label>WebSocket <b id="wsState">closed</b></label>
+            <input id="wsUrl" value="ws://localhost:8765"
+                   style="width:100%;background:var(--ink);border:1px solid var(--line);color:var(--data);font:500 0.65rem var(--mono);padding:0.35rem;border-radius:2px">
+            <button class="cta ghost" id="wsConnect"
+                    style="width:100%;margin-top:0.4rem;padding:0.4rem;font-size:0.7rem">Connect</button>
+          </div>
+          <div class="field" style="margin-top:0.5rem">
+            <label>Layout</label>
+            <div class="seg" role="group">
+              <button data-lay="2box4s" aria-pressed="true">2 CORNER</button>
+              <button data-lay="4wide" aria-pressed="false">4 SPLAYED</button>
+              <button data-lay="4lin" aria-pressed="false">4 IN LINE</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="sec">
+          <h2>Live sensors</h2>
+          <table class="sens" id="sensTable">
+            <thead>
+              <tr>
+                <th>Sensor</th><th>Raw</th><th>Median</th><th>Echo</th>
+                <th>Min</th><th>Max</th><th>Bearing</th>
+              </tr>
+            </thead>
+            <tbody id="sensBody"></tbody>
+          </table>
+          <p class="hint" style="margin-top:0.4rem">
+            <b>Max</b> is the furthest echo this sensor has ever returned — that is your
+            measured range ceiling. <b>Echo</b> is the fill rate of the median window.
+          </p>
+        </div>
+
+        <div class="sec">
+          <h2>Solve</h2>
+          <div class="kv big"><span>Mode</span><span id="kMode">—</span></div>
+          <div class="kv"><span>Position</span><span id="kPos">—</span></div>
+          <div class="kv"><span>Uncertainty ±</span><span id="kSigma">—</span></div>
+          <div class="kv"><span>Range gap</span><span id="kGap">—</span></div>
+          <div class="kv"><span>Pair spread</span><span id="kSpread">—</span></div>
+          <div class="kv"><span>Worst sector miss</span><span id="kMiss">—</span></div>
+          <div class="kv"><span>RMS residual</span><span id="kRes">—</span></div>
+          <div class="kv"><span>Gate rejects</span><span id="kGate">0</span></div>
+          <div class="kv"><span>Old solver</span><span id="kLegacy">—</span></div>
+          <div class="kv"><span>Old vs new</span><span id="kDelta">—</span></div>
+          <p class="hint" style="margin-top:0.4rem" id="kReason">—</p>
+        </div>
+
+        <div class="sec">
+          <h2>Boolean sectors</h2>
+          <div id="sectorList"></div>
+          <p class="hint" style="margin-top:0.4rem">
+            Which sensors fired, and the bearing wedge that implies. A box whose two
+            sensors both fire gives the narrow overlap sector — the most precise
+            bearing available without a second box.
+          </p>
+        </div>
+
+        <div class="sec">
+          <h2>Measured beam width</h2>
+          <p class="hint" style="margin-bottom:0.5rem">
+            Every captured sample bins by bearing. Green = the sensor fired, red = it
+            stayed silent. The white brackets are the <i>configured</i> cone. Where green
+            stops is your real cone — match the brackets to it.
+          </p>
+          <div id="histList"></div>
+        </div>
+
+        <div class="sec">
+          <h2>Calibration</h2>
+          <div class="kv"><span>Samples</span><span id="cSamples">0</span></div>
+          <div class="kv"><span>Truth source</span><span id="cTruthSrc">—</span></div>
+          <div class="kv"><span>Capture</span><span id="cStatus">idle</span></div>
+          <div class="btnrow">
+            <button class="cta" id="cCapture">Capture burst</button>
+            <button class="cta ghost" id="cClear">Clear</button>
+          </div>
+          <div class="btnrow">
+            <button class="cta ghost" id="cFit">Fit cones</button>
+            <button class="cta ghost" id="cExport">Export CSV</button>
+          </div>
+          <p class="hint" style="margin-top:0.5rem">
+            <b>Live rig workflow:</b> stand on a marked spot, click that spot on the field,
+            press <b>C</b>. Repeat across a grid of 10–15 spots, then Fit cones.
+          </p>
+        </div>
+
+        <div class="sec">
+          <h2>Cone tuning</h2>
+          <p class="hint" style="margin-bottom:0.5rem">
+            Live overrides — aim and full width per sensor. Nudge these until the drawn
+            cones match where the sensors really see, then copy the config out.
+          </p>
+          <div id="tuneList"></div>
+          <div class="btnrow">
+            <button class="cta ghost" id="tReset">Reset to config</button>
+            <button class="cta ghost" id="tCopy">Copy config</button>
+          </div>
+          <textarea class="cfg" id="cfgOut" readonly
+                    placeholder="Fit or tune the cones, then Copy config — paste the result into game/js/config.js and bridge/config.py."></textarea>
+        </div>
+
+        <div class="sec">
+          <h2>Sim model</h2>
+          <div class="field">
+            <label>Range noise σ <b id="vNoise">20 mm</b></label>
+            <input type="range" id="sNoise" min="0" max="80" value="20">
+          </div>
+          <div class="field">
+            <label>Dropout rate <b id="vDrop">3 %</b></label>
+            <input type="range" id="sDrop" min="0" max="40" value="3">
+          </div>
+          <div class="field">
+            <label>Sim beam width <b id="vBeam">40°</b></label>
+            <input type="range" id="sBeam" min="15" max="80" value="40">
+          </div>
+          <div class="field">
+            <label>Smoothing α <b id="vAlpha">0.35</b></label>
+            <input type="range" id="sAlpha" min="5" max="100" value="35">
+          </div>
+          <p class="hint">
+            Set the sim beam away from 40° to sense with one width while the solver
+            still assumes the calibrated one. That is the mis-calibration test.
+          </p>
+        </div>
+
+        <div class="sec">
+          <h2>Coverage (from current cones)</h2>
+          <div class="kv"><span>Two-box exact</span><span id="covTwo">—</span></div>
+          <div class="kv"><span>One-box polar</span><span id="covOne">—</span></div>
+          <div class="kv"><span>Blind</span><span id="covNone">—</span></div>
+          <p class="hint" style="margin-top:0.4rem">
+            Geometry only — no noise, no dropout. Turn on the Coverage map layer to see
+            where each region falls.
+          </p>
+        </div>
+
+      </aside>
+    </div>
+  </div>
+
+  <script src="js/config.js"></script>
+  <script src="js/sectors.js"></script>
+  <script src="js/solver.js"></script>
+  <script src="js/tracker.js"></script>
+  <script src="js/sensortest.js"></script>
+</body>
+</html>

@@ -147,7 +147,13 @@ function updateHUD() {
       txt.textContent = "DEAD ZONE — alarm active";
     } else if (Tracker.stale) {
       dot.className = "dot bad";
-      txt.textContent = "No fix — fewer than 2 sensors returning";
+      txt.textContent = "No fix — no sensor is returning an echo";
+    } else if (Tracker.veto) {
+      dot.className = "dot bad";
+      txt.textContent = "Fix rejected — " + Tracker.reason;
+    } else if (Tracker.mode === "one-box" && Tracker.pos) {
+      dot.className = "dot";
+      txt.textContent = "Degraded — one box only, cursor is coarse";
     } else if (Tracker.pos) {
       dot.className = "dot ok";
       txt.textContent = "Tracking";

@@ -1,0 +1,171 @@
+/* ══════════════════════════════════════════════════════════════
+   MOLEFIELD — Sensor Test Bench
+   Layers on top of style.css (which supplies the design tokens).
+   ══════════════════════════════════════════════════════════════ */
+
+body { overflow: hidden; }
+
+#stapp {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  height: 100dvh;
+}
+
+#stmain {
+  display: grid;
+  grid-template-columns: 1fr 420px;
+  min-height: 0;
+  background: var(--line);
+  gap: 1px;
+}
+
+#fieldwrap {
+  position: relative;
+  background: var(--ink);
+  min-width: 0;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+}
+
+#field { width: 100%; height: 100%; display: block; cursor: crosshair; }
+#fieldbox { position: relative; min-height: 0; }
+
+#stside {
+  background: var(--ink);
+  overflow-y: auto;
+  padding: 0.7rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+/* ── Layer toggle chips ─────────────────────────────────────── */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  padding: 0.5rem 0.7rem;
+  border-bottom: 1px solid var(--line);
+  align-items: center;
+}
+
+.chip {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  color: var(--text-dim);
+  font: 600 0.58rem/1 var(--mono);
+  letter-spacing: 0.08em;
+  padding: 0.32rem 0.5rem;
+  border-radius: 2px;
+  text-transform: uppercase;
+}
+
+.chip[aria-pressed="true"] {
+  background: var(--data);
+  border-color: var(--data);
+  color: var(--ink);
+}
+
+.chip.warn[aria-pressed="true"] { background: var(--amber); border-color: var(--amber); }
+
+#fieldfoot {
+  padding: 0.4rem 0.7rem;
+  border-top: 1px solid var(--line);
+  font: 500 0.62rem/1.5 var(--mono);
+  color: var(--text-dim);
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+#fieldfoot b { color: var(--data); font-weight: 600; }
+
+/* ── Sensor table ───────────────────────────────────────────── */
+table.sens {
+  width: 100%;
+  border-collapse: collapse;
+  font: 500 0.62rem/1.4 var(--mono);
+}
+
+table.sens th {
+  text-align: right;
+  color: var(--text-dim);
+  font-weight: 600;
+  font-size: 0.54rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0.2rem 0.25rem;
+  border-bottom: 1px solid var(--line);
+}
+
+table.sens th:first-child, table.sens td:first-child { text-align: left; }
+table.sens td { text-align: right; padding: 0.28rem 0.25rem; border-bottom: 1px solid #1B222A; }
+table.sens tr.live td { color: var(--data); }
+table.sens tr.dead td { color: #4A5763; }
+
+.swatch {
+  display: inline-block;
+  width: 8px; height: 8px;
+  border-radius: 2px;
+  margin-right: 0.35rem;
+  vertical-align: baseline;
+}
+
+/* ── Bearing histogram strips ───────────────────────────────── */
+.histrow { margin-bottom: 0.45rem; }
+
+.histlab {
+  display: flex;
+  justify-content: space-between;
+  font: 600 0.56rem/1.4 var(--mono);
+  color: var(--text-dim);
+  margin-bottom: 0.15rem;
+}
+
+.histlab b { color: var(--text); font-weight: 600; }
+canvas.hist { width: 100%; height: 26px; display: block; border: 1px solid var(--line); border-radius: 2px; }
+
+/* ── Misc ───────────────────────────────────────────────────── */
+.kv {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font: 500 0.63rem/1.6 var(--mono);
+  border-bottom: 1px solid #1B222A;
+  padding: 0.1rem 0;
+}
+
+.kv span:first-child { color: var(--text-dim); }
+.kv span:last-child { color: var(--text); text-align: right; }
+.kv.big span:last-child { color: var(--data); font-weight: 600; }
+
+.ok { color: var(--signal) !important; }
+.warn { color: var(--amber) !important; }
+.bad { color: var(--alarm) !important; }
+
+.btnrow { display: flex; gap: 0.4rem; margin-top: 0.5rem; }
+.btnrow .cta { flex: 1; padding: 0.42rem 0.4rem; font-size: 0.66rem; }
+
+textarea.cfg {
+  width: 100%;
+  height: 128px;
+  background: var(--ink);
+  border: 1px solid var(--line);
+  color: var(--data);
+  font: 500 0.58rem/1.45 var(--mono);
+  padding: 0.4rem;
+  border-radius: 2px;
+  resize: vertical;
+}
+
+.tunerow {
+  display: grid;
+  grid-template-columns: 1.6rem 1fr 2.9rem;
+  align-items: center;
+  gap: 0.35rem;
+  font: 500 0.6rem/1 var(--mono);
+  margin-bottom: 0.25rem;
+}
+
+.tunerow input[type=range] { width: 100%; }
+.tunerow b { color: var(--data); text-align: right; font-weight: 600; }
