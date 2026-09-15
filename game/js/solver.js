@@ -6,13 +6,9 @@
    ══════════════════════════════════════════════════════════════ */
 
 const Sim = {
-  noise: 0.008,      // Range noise std dev in metres (8 mm)
-  drop: 0.03,        // Missing echo probability (3%)
-  beamOverride: 40   // FULL beam width (deg) used when SENSING, or null to use
-                     // each sensor's calibrated `w`. Setting this to something
-                     // other than the calibrated width simulates a MIS-CALIBRATED
-                     // rig — sense at one width, solve at another — which is the
-                     // single most useful robustness test for the sector solver.
+  noise: 0.008, // Range noise std dev in metres (8 mm)
+  drop: 0.03,   // Missing echo probability (3%)
+  beam: 30      // Sensor half-beam aperture in degrees
 };
 
 let gauss_spare = null;
@@ -45,27 +41,18 @@ function simulateRanges(truth, sensors) {
     const d = Math.hypot(dx, dy);
     const facing = ((s.a || 0) * Math.PI) / 180;
     const bearing = Math.atan2(dx, dy);
-    const half = (Sim.beamOverride != null ? Sim.beamOverride / 2 : beamHalf(s)) * Math.PI / 180;
 
-    const surface = d - AREA.bodyR;
-    if (Math.abs(bearing - facing) > half) return null;                     // Outside beam
-    if (surface > BEAM.maxRange || surface < BEAM.minRange) return null;    // Range limits
+    if (Math.abs(bearing - facing) > (Sim.beam * Math.PI) / 180) return null; // Outside beam
+    if (d > 4.0 || d < 0.02) return null;                                    // Range limits
     if (Math.random() < Sim.drop) return null;                              // Packet drop
 
-    return Math.max(BEAM.minRange, surface + gauss() * Sim.noise);
+    const surface = d - AREA.bodyR;
+    return Math.max(0.02, surface + gauss() * Sim.noise);
   });
 }
 
 /**
- * LEGACY least-squares multilateration: coarse grid search then gradient
- * descent. Superseded by solveSectors() in sectors.js — kept only so the
- * sensor test page can show the two side by side.
- *
- * Known limits, which is exactly why it was replaced: with two sensors the
- * system is exactly determined, so `res` is identically zero however wrong
- * the answer is; it cannot see a non-intersection; and it returns null
- * (cursor dies) whenever fewer than two sensors report.
- *
+ * Least-squares multilateration: coarse grid search then gradient descent.
  * Returns { x, y, res, n } or null when fewer than 2 sensors report.
  */
 function solvePosition(ranges, sensors) {

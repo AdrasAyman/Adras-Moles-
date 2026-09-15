@@ -139,38 +139,6 @@ function updateHUD() {
   if (roDepth) roDepth.textContent = p ? `${p.y.toFixed(2)} m` : "—";
   if (roN) roN.textContent = `${Tracker.nSensors} / ${Tracker.sensors.length}`;
 
-  const roMode = $("#roMode");
-  const roSigma = $("#roSigma");
-  const roGap = $("#roGap");
-  const roReason = $("#roReason");
-  const MODE_LABEL = {
-    "mouse": "pointer",
-    "two-box": "two-box exact",
-    "one-box": "one-box polar (coarse)",
-    "blind": "no fix"
-  };
-  if (roMode) {
-    roMode.textContent = MODE_LABEL[Tracker.mode] || Tracker.mode;
-    roMode.style.color =
-      Tracker.veto ? "var(--alarm)" :
-      Tracker.mode === "one-box" ? "var(--amber)" :
-      Tracker.mode === "blind" ? "var(--text-dim)" : "var(--signal)";
-  }
-  if (roSigma) {
-    roSigma.textContent = (Tracker.src === "mouse" || !isFinite(Tracker.sigma))
-      ? "n/a" : `${(Tracker.sigma * 1000.0).toFixed(0)} mm`;
-  }
-  if (roGap) {
-    const g = Tracker.fix ? Tracker.fix.gap : 0;
-    roGap.textContent = Tracker.src === "mouse" ? "n/a" : `${(g * 1000.0).toFixed(0)} mm`;
-    roGap.style.color = g > SOLVER.maxGap ? "var(--alarm)" : "";
-  }
-  if (roReason) {
-    roReason.textContent = Tracker.reason || (
-      Tracker.mode === "two-box" ? "Clean two-box fix — both boxes agree." :
-      Tracker.mode === "mouse" ? "Pointer is the ground truth." : "—");
-  }
-
   const dot = $("#stDot");
   const txt = $("#stText");
   if (dot && txt) {
@@ -179,13 +147,7 @@ function updateHUD() {
       txt.textContent = "DEAD ZONE — alarm active";
     } else if (Tracker.stale) {
       dot.className = "dot bad";
-      txt.textContent = "No fix — no sensor is returning an echo";
-    } else if (Tracker.veto) {
-      dot.className = "dot bad";
-      txt.textContent = "Fix rejected — " + Tracker.reason;
-    } else if (Tracker.mode === "one-box" && Tracker.pos) {
-      dot.className = "dot";
-      txt.textContent = "Degraded — one box only, cursor is coarse";
+      txt.textContent = "No fix — fewer than 2 sensors returning";
     } else if (Tracker.pos) {
       dot.className = "dot ok";
       txt.textContent = "Tracking";
