@@ -52,6 +52,17 @@ const Tracker = {
   detected: false,           // bridge has decided the value count from real packets
   ageSpreadMs: 0,            // how far apart in time the readings of the last solve were
 
+  // Jitter control (see SOLVER in config.js)
+  gates: [],                 // RangeGate per sensor
+  rangeHist: [],             // accepted readings per sensor, for the averaged display
+  displayRanges: [],         // per-sensor range averaged over SOLVER.averageMs
+  fixHist: [],               // accepted positions, for the averaged cursor
+  avgWindowMs: 0,            // current averaging window (adapts to walking speed)
+  moveSpeed: 0,              // estimated walking speed, m/s
+  lastFix: null,             // last accepted (un-averaged) position
+  wobble: [],                // recent cursor positions, for jitterMm
+  jitterMm: 0,               // RMS wobble of the cursor over the last 2 s
+
   // Solver output & diagnostics (read by the HUD, radar and test page)
   fix: null,
   mode: "blind",
@@ -87,6 +98,12 @@ const Tracker = {
     this.sensorT = new Array(n).fill(0);
     this.sensorHz = new Array(n).fill(0);
     this.sensorCounts = new Array(n).fill(0);
+    this.gates = [];
+    for (let i = 0; i < n; i++) this.gates.push(new RangeGate());
+    this.rangeHist = Array.from({ length: n }, () => []);
+    this.displayRanges = new Array(n).fill(null);
+    this.fixHist = [];
+    this.lastFix = null;
     this.live.lastSeq = new Array(n).fill(null);
     this.live.lastVal = new Array(n).fill(undefined);
     this.simNext = [];
@@ -113,7 +130,11 @@ const Tracker = {
   /** One genuinely new reading from sensor i (metres, or null for no echo). */
   pushReading(i, v, t) {
     if (i < 0 || i >= this.rings.length) return;
+    // A reading no walking player could produce is dropped here, before it can
+    // reach the median filter or the solver. The sensor keeps its last good value.
+    if (this.gates[i] && !this.gates[i].check(v, t)) return;
     this.rings[i].push(v, t);
+    this.rangeHist[i].push({ v: v, t: t });
     this.rawRanges[i] = v;
     this.sensorT[i] = t;
     this.sensorCounts[i]++;
@@ -171,6 +192,8 @@ const Tracker = {
         this.raw = { x: this.mouse.x, y: this.mouse.y };
         this.pos = { x: this.mouse.x, y: this.mouse.y, vx: 0, vy: 0 };
       }
+      this.displayRanges = this.rawRanges;
+      this.measureWobble(now);
       this.tickRates(dt);
       return;
     }
@@ -218,13 +241,17 @@ const Tracker = {
     if (measured) {
       const dT = Math.max(0.001, (now - (this.lastMeasT || now)) / 1000.0);
       this.lastMeasT = now;
+      const averaging = SOLVER.averageMs > 0;
 
-      if (!this.pos) {
-        this.pos = { x: measured.x, y: measured.y, vx: 0, vy: 0 };
+      if (!this.pos || !this.lastFix) {
+        this.acceptFix(measured, now, true);
         this.gateRejects = 0;
       } else {
-        const rx = measured.x - this.pos.x;
-        const ry = measured.y - this.pos.y;
+        // Gate against the last ACCEPTED fix. The averaged cursor lags behind by
+        // design, so gating against it would wrongly reject real walking.
+        const ref = averaging ? this.lastFix : this.pos;
+        const rx = measured.x - ref.x;
+        const ry = measured.y - ref.y;
         const jump = Math.hypot(rx, ry);
 
         // ── Velocity gate ──
@@ -241,10 +268,9 @@ const Tracker = {
           if (this.gateRejects === 1) this.gateRejectedSince = now;
         } else {
           if (stuck) {
-            this.pos.x = measured.x;
-            this.pos.y = measured.y;
-            this.pos.vx = 0;
-            this.pos.vy = 0;
+            this.acceptFix(measured, now, true);     // re-acquire: snap, drop history
+          } else if (averaging) {
+            this.acceptFix(measured, now, false);
           } else {
             const a = this.alpha;
             const b = (a * a) / (2.0 - a);   // critically damped alpha-beta
@@ -255,13 +281,114 @@ const Tracker = {
             this.pos.y += a * ry;
             this.pos.vx = ((this.pos.vx || 0) + (b / dv) * rx) * 0.85;
             this.pos.vy = ((this.pos.vy || 0) + (b / dv) * ry) * 0.85;
+            this.lastFix = { x: measured.x, y: measured.y };
           }
           this.gateRejects = 0;
         }
       }
     }
 
+    /* ── 4. Averaging: a long window standing still, a short one walking ── */
+    if (SOLVER.averageMs > 0 && this.fixHist.length) {
+      const h = this.fixHist;
+      const keep = Math.max(SOLVER.averageMs, 500) + 50;
+      while (h.length > 1 && h[1].t <= now - keep) h.shift();
+
+      // Walking speed from how far the average moved between two 250 ms slices.
+      const a = this.timeAverage(h, now - 250, now, ["x", "y"]);
+      const b = this.timeAverage(h, now - 500, now - 250, ["x", "y"]);
+      this.moveSpeed = Math.hypot(a.x - b.x, a.y - b.y) / 0.25;
+
+      const lo = Math.min(SOLVER.averageMinMs || SOLVER.averageMs, SOLVER.averageMs);
+      const f = Math.max(0, Math.min(1, (this.moveSpeed - SOLVER.stillSpeed) / Math.max(0.01, SOLVER.walkSpeed - SOLVER.stillSpeed)));
+      const target = SOLVER.averageMs - f * (SOLVER.averageMs - lo);
+      // Ease the window toward its target so a change of window never jerks the cursor.
+      if (!this.avgWindowMs) this.avgWindowMs = target;
+      this.avgWindowMs += (target - this.avgWindowMs) * Math.min(1, dt / 0.25);
+
+      const avg = this.timeAverage(h, now - this.avgWindowMs, now, ["x", "y"]);
+      this.pos = { x: avg.x, y: avg.y, vx: 0, vy: 0 };
+    }
+    this.updateDisplayRanges(now);
+    this.measureWobble(now);
+
     this.tickRates(dt);
+  },
+
+  /** Record an accepted position; `snap` restarts the average from here. */
+  acceptFix(p, now, snap) {
+    if (snap) {
+      this.fixHist = [];
+      this.avgWindowMs = 0;
+      this.pos = { x: p.x, y: p.y, vx: 0, vy: 0 };
+    }
+    this.fixHist.push({ t: now, x: p.x, y: p.y });
+    this.lastFix = { x: p.x, y: p.y };
+  },
+
+  /**
+   * Time-weighted average of a step signal over the last `windowMs`.
+   * Each entry holds from its own time until the next entry (or now), so a
+   * position that was current for 400 ms counts four times as much as one that
+   * was current for 100 ms — irregular update rates don't bias the result.
+   */
+  timeAverage(hist, from, to, keys) {
+    const out = {};
+    let wsum = 0;
+    for (const k of keys) out[k] = 0;
+    for (let i = 0; i < hist.length; i++) {
+      const start = Math.max(hist[i].t, from);
+      const end = Math.min(i + 1 < hist.length ? hist[i + 1].t : to, to);
+      const w = end - start;
+      if (w <= 0) continue;
+      for (const k of keys) out[k] += hist[i][k] * w;
+      wsum += w;
+    }
+    if (wsum <= 0) {
+      // Nothing inside the window: the value current at `to` is the answer.
+      let last = hist[0];
+      for (const e of hist) if (e.t <= to) last = e;
+      for (const k of keys) out[k] = last[k];
+      return out;
+    }
+    for (const k of keys) out[k] /= wsum;
+    return out;
+  },
+
+  /** Per-sensor ranges averaged over the same window, for readouts that jitter. */
+  updateDisplayRanges(now) {
+    for (let i = 0; i < this.rangeHist.length; i++) {
+      const h = this.rangeHist[i];
+      if (!h.length) { this.displayRanges[i] = null; continue; }
+      if (h[h.length - 1].v == null || !(SOLVER.averageMs > 0)) {
+        this.displayRanges[i] = h[h.length - 1].v;
+        while (h.length > 1) h.shift();
+        continue;
+      }
+      // Average only the echoes; a recent no-echo inside the window is skipped.
+      const echoes = h.filter(e => e.v != null);
+      this.displayRanges[i] = echoes.length ? this.timeAverage(echoes, now - SOLVER.averageMs, now, ["v"]).v : null;
+      while (h.length > 1 && h[1].t <= now - SOLVER.averageMs) h.shift();
+    }
+  },
+
+  /** RMS distance of the cursor from its own mean over the last 2 s. */
+  measureWobble(now) {
+    if (!this.pos) { this.wobble = []; this.jitterMm = 0; return; }
+    this.wobble.push({ t: now, x: this.pos.x, y: this.pos.y });
+    while (this.wobble.length && this.wobble[0].t < now - 2000) this.wobble.shift();
+    const n = this.wobble.length;
+    let mx = 0, my = 0;
+    for (const w of this.wobble) { mx += w.x; my += w.y; }
+    mx /= n; my /= n;
+    let ss = 0;
+    for (const w of this.wobble) ss += (w.x - mx) ** 2 + (w.y - my) ** 2;
+    this.jitterMm = Math.sqrt(ss / n) * 1000;
+  },
+
+  /** Readings rejected by each sensor's range gate since the page loaded. */
+  rangeRejects() {
+    return this.gates.map(g => g.total);
   },
 
   tickRates(dt) {

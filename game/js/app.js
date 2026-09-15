@@ -90,7 +90,7 @@ function updateSensorReadings() {
   const ages = Tracker.ages();
   document.querySelectorAll("#sensorList .sensrow").forEach(row => {
     const i = +row.dataset.i;
-    const r = Tracker.ranges[i];
+    const r = Tracker.displayRanges[i];   // averaged over SOLVER.averageMs: steadier numbers
     const has = r != null;
     const dot = row.querySelector(".sdot");
     const bar = row.querySelector(".sbar i");
@@ -107,7 +107,7 @@ function updateSensorReadings() {
 
   document.querySelectorAll("#boxLayout .boxrow").forEach(row => {
     const i = +row.dataset.i;
-    const r = Tracker.ranges[i];
+    const r = Tracker.displayRanges[i];
     const val = row.querySelector(".bval");
     if (val) {
       val.textContent = displayRange(i, r);

@@ -8,6 +8,7 @@
 const Sim = {
   noise: 0.008,      // Range noise std dev in metres (8 mm)
   drop: 0.03,        // Missing echo probability (3%)
+  spike: 0.0,        // Probability a reading is wild (a random range): jitter testing
   timing: "regular", // "regular": every box at SOLVER.measureHz
                      // "irregular": box 1 ~every 100 ms with jitter, box 2 at
                      // random intervals (mean ~700 ms) — boxes that upstream
@@ -56,6 +57,9 @@ function simulateRanges(truth, sensors) {
     if (surface > BEAM.maxRange || surface < BEAM.minRange) return null;    // Range limits
     if (Math.random() < Sim.drop) return null;                              // Packet drop
 
+    if (Math.random() < Sim.spike) {
+      return BEAM.minRange + Math.random() * (BEAM.maxRange - BEAM.minRange);   // stray echo
+    }
     return Math.max(BEAM.minRange, surface + gauss() * Sim.noise);
   });
 }

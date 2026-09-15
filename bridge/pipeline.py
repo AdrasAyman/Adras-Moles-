@@ -17,7 +17,7 @@ from typing import Any, TextIO
 
 from bridge.config import LAYOUTS, SOLVER
 from bridge.hub import SensorHub
-from bridge.sectors import MedianRing, solve_sectors
+from bridge.sectors import MedianRing, RangeGate, solve_sectors
 from bridge.websocket_server import WebSocketServer
 
 MAX_SENSORS = 4
@@ -45,6 +45,7 @@ def pump(
 
     layout = None
     rings: list[MedianRing] = []
+    gates: list[RangeGate] = []
     last_seq: list[int] = []
     prev_fix: dict | None = None
 
@@ -73,14 +74,17 @@ def pump(
             if snap["layout"] != layout:
                 layout = snap["layout"]
                 rings = [MedianRing(int(SOLVER["median_window"])) for _ in r]
+                gates = [RangeGate(SOLVER["max_range_rate"], SOLVER["range_gate_tol_m"],
+                                   SOLVER["range_rejoin_count"]) for _ in r]
                 last_seq = [0] * len(r)
                 prev_fix = None
             fresh = False
             for i, ring in enumerate(rings):
                 if snap["seq"][i] != last_seq[i]:
                     last_seq[i] = snap["seq"][i]
-                    ring.push(r[i], now)
-                    fresh = True
+                    if gates[i].check(r[i], now):      # drop readings no walker could produce
+                        ring.push(r[i], now)
+                        fresh = True
             if not fresh:
                 continue
             max_age = SOLVER["median_max_age_ms"] / 1000.0

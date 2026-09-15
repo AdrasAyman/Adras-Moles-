@@ -222,6 +222,7 @@ const Telemetry = (() => {
     S.prevRejects = S.maxRejects = 0;
     S.mixed = false;
     S.lastSensorT = [];
+    S.rejSeen = [];
     S.alarm = false;
     S.moles.clear();
   }
@@ -315,6 +316,20 @@ const Telemetry = (() => {
   /** Conditions that are about time rather than individual measurements. */
   function detectContinuous() {
     const n = now();
+    // Range gate: report ignored readings per sensor, at most once a second each.
+    const rej = Tracker.rangeRejects ? Tracker.rangeRejects() : [];
+    S.rejSeen = S.rejSeen || [];
+    rej.forEach((total, i) => {
+      if (S.rejSeen[i] == null) { S.rejSeen[i] = total; return; }
+      if (total <= S.rejSeen[i]) return;
+      limited("rangerej" + i, 1000, () => {
+        const g = Tracker.gates[i], lr = g && g.lastReject;
+        event("anomaly", "range_reject", {
+          sensor: i, name: Tracker.sensors[i] ? Tracker.sensors[i].n : String(i), ignored: total - S.rejSeen[i],
+          value_mm: lr ? mm(lr.v) : null, last_good_mm: lr ? mm(lr.from) : null, allowed_mm: lr ? mm(lr.allowed) : null });
+        S.rejSeen[i] = total;
+      });
+    });
     if (Tracker.src === "live") {
       // Held values never go stale any more; what can go wrong is the boxes
       // disagreeing about how many values they send.

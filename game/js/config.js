@@ -48,8 +48,26 @@ const SOLVER = {
                         // or irregular upstream is never outvoted by old copies.
   holdMismatchMs: 750,  // Two boxes' values this far apart in time get flagged
   measureHz: 15.6,      // Regular sim rate (the old slotted ping rate)
-  maxSpeed: 4.0,        // m/s — measurements implying more are rejected
-  gateTimeoutMs: 500,   // ...but after this long we re-acquire anyway
+
+  /* ── Jitter control ────────────────────────────────────────────
+     Players walk. These limits reject readings no walking person
+     could produce, then average what is left. */
+  maxRangeRate: 2.0,    // m/s — a sensor's range can't change faster than a brisk
+                        // walk; a reading further from that sensor's last accepted
+                        // value than (maxRangeRate × time since) + tolerance is
+                        // ignored. 0 turns the range gate off.
+  rangeGateTolM: 0.12,  // m — allowance for ordinary sensor noise on top of that
+  rangeRejoinCount: 3,  // ...unless this many rejected readings in a row agree with
+                        // each other: then the player really is there, so accept.
+  averageMs: 1000,      // Cursor = time-weighted average position over this window
+                        // while the player stands still. 0 = no averaging (alpha-beta).
+  averageMinMs: 250,    // ...shrinking to this while they walk. A fixed 1 s average
+                        // trails a walking player by ~45 cm; standing still on a mole
+                        // is where steadiness matters, walking is where lag does.
+  stillSpeed: 0.20,     // m/s — at or below: full window
+  walkSpeed: 0.60,      // m/s — at or above: shortest window
+  maxSpeed: 2.5,        // m/s — solved positions implying faster movement are rejected
+  gateTimeoutMs: 600,   // ...but after this long we re-acquire anyway
   sectorTolDeg: 6.0,    // Slack before a fix is vetoed for leaving its cone
   maxGap: 0.35,         // m — circle separation above this is not a real fix
   pairSpreadWarn: 0.25  // m — co-located sensors disagreeing by more than this

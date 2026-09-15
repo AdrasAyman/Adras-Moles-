@@ -75,6 +75,47 @@ class MedianRing:
         self.buf.clear()
 
 
+class RangeGate:
+    """
+    Rejects readings from one sensor that no walking player could produce.
+    Mirrors RangeGate in game/js/sectors.js: a reading may differ from the last
+    accepted one by at most max_range_rate * elapsed + tolerance, unless
+    `rejoin` rejected readings in a row agree with each other. None (no echo)
+    is never gated. Times are in seconds.
+    """
+
+    def __init__(self, rate: float, tol: float, rejoin: int):
+        self.rate, self.tol, self.rejoin = rate, tol, max(1, int(rejoin))
+        self.last: float | None = None
+        self.last_t = 0.0
+        self.pending: list[tuple[float, float]] = []
+        self.total = 0
+
+    def check(self, v: float | None, t: float) -> bool:
+        if v is None or self.rate <= 0 or self.last is None:
+            return self._accept(v, t)
+        allowed = self.rate * max(0.0, t - self.last_t) + self.tol
+        if abs(v - self.last) <= allowed:
+            return self._accept(v, t)
+        self.pending.append((v, t))
+        if len(self.pending) > self.rejoin:
+            self.pending.pop(0)
+        agree = len(self.pending) >= self.rejoin and all(
+            abs(self.pending[k][0] - self.pending[k - 1][0])
+            <= self.rate * max(0.0, self.pending[k][1] - self.pending[k - 1][1]) + self.tol
+            for k in range(1, len(self.pending)))
+        if agree:
+            return self._accept(v, t)
+        self.total += 1
+        return False
+
+    def _accept(self, v: float | None, t: float) -> bool:
+        if v is not None:
+            self.last, self.last_t = v, t
+        self.pending = []
+        return True
+
+
 def _half(sensor: Sequence[float]) -> float:
     """Half beam width in degrees."""
     return (sensor[3] if len(sensor) > 3 else BEAM_DEFAULT_W) / 2.0

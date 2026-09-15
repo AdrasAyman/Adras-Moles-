@@ -26,6 +26,7 @@ const ANOMALY_INFO = {
   sector_conflict: ["Sector conflict", "Which sensors fired is impossible under the current cone calibration."],
   jump: ["Position jump", "The raw fix moved more than 0.6 m between consecutive measurements."],
   gate_reject: ["Velocity gate", "Measurements implied faster than 4 m/s movement and were rejected by the tracker."],
+  range_reject: ["Reading ignored", "A reading changed faster than a walking player could move (2 m/s plus 120 mm of noise allowance) and was dropped. \"ignored\" counts how many in that burst."],
   long_hold: ["Long hold", "A sensor went 2 s or more without sending a new reading, so the game kept computing with its last value."],
   held_mismatch: ["Held-value mismatch", "One solve combined readings taken 750 ms or more apart, so the fix mixes where the player was then with where they are now."],
   mixed_values: ["Mixed value counts", "One box was sending one value while the other sent two; the layout was kept and the odd box's packets were ignored."],

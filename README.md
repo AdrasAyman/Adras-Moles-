@@ -166,13 +166,39 @@ It is drawn dashed and amber so a degraded cursor is never mistaken for a confid
 one. Measured on the built layout this lifts the "cursor alive" rate from ~88% to
 ~99.5%.
 
-### 6. Alpha-beta filter
-The filter **predicts** every animation frame and **corrects** only when a new
-measurement actually arrives — sensors ping at 15.6 Hz while the browser runs at
-60 Hz, and treating each repeat as a fresh observation is what used to make the
-cursor staircase. A velocity gate rejects measurements implying more than
-`SOLVER.maxSpeed` (4 m/s), re-acquiring after `gateTimeoutMs` so a genuine
-teleport cannot freeze the cursor permanently.
+### 6. Jitter control
+Players walk, so anything implying faster movement is treated as a glitch. Three layers
+work together, and every setting lives in `SOLVER` in `game/js/config.js`:
+
+1. **Range gate** (`maxRangeRate` 2.0 m/s, `rangeGateTolM` 0.12 m). A sensor's new
+   reading is ignored if it's further from that sensor's last accepted reading than a
+   walker could move in the time since, plus a noise allowance. It never locks up: the
+   allowance grows with time, and if 3 ignored readings in a row agree with each other
+   (`rangeRejoinCount`), the player really did move and the reading is accepted. A "no
+   echo" is never gated. Ignored readings show up in the logs as *Reading ignored*.
+2. **Position gate** (`maxSpeed` 2.5 m/s). A solved position implying faster movement
+   than this is rejected, re-acquiring after `gateTimeoutMs` so a real jump can't
+   freeze the cursor.
+3. **Adaptive averaging** (`averageMs` 1000, `averageMinMs` 250). The cursor is the
+   time-weighted average position over the last second while the player stands
+   still, and the window shrinks to 250 ms as they walk (between `stillSpeed` 0.2 and
+   `walkSpeed` 0.6 m/s). Standing on a mole is when steadiness matters; walking to
+   the next one is when lag matters. The game's sensor readouts are averaged over the
+   same second. Set `averageMs` to 0 to use the old alpha-beta filter instead.
+
+Measured on the sensor test page (simulator, 25 mm noise, 10% wild readings, averaged
+over three runs; *wobble* is RMS cursor movement while standing still, *trail* is how
+far the cursor lags a player walking at 0.6 m/s):
+
+| Setup | Wobble, standing | Biggest jump, standing | Trail, walking |
+|---|---|---|---|
+| Before (no gates, alpha filter) | 25 mm | 39 mm | 187 mm |
+| Range gate only | 21 mm | 34 mm | 204 mm |
+| Gates + fixed 1 s average | 13 mm | 5 mm | 485 mm |
+| **Gates + adaptive 1 s → 250 ms (default)** | 10 mm | 5 mm | 284 mm |
+
+Try the settings live on the sensor test page: the *Wild readings*, *Walking speed
+limit* and *Averaging window* sliders, with *Cursor wobble* in the Solve panel.
 
 ---
 
@@ -252,6 +278,7 @@ simulated mode. That is what makes the "error against ground truth" numbers poss
 | Sector conflict | The set of firing sensors is impossible under the cone calibration |
 | Position jump | The raw fix moves more than 0.6 m between measurements |
 | Velocity gate | The tracker rejects movement faster than 4 m/s |
+| Reading ignored | A reading changes faster than a walking player could move (range gate) |
 | Long hold | A sensor goes 2 s or more without sending a new reading |
 | Held-value mismatch | One solve combines readings taken 750 ms or more apart |
 | Mixed value counts | One box sends one value while the other sends two |

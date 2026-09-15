@@ -77,6 +77,9 @@ VALUES_PER_BOX_LAYOUT: dict[int, str] = {1: "2box2s", 2: "2box4s"}
 SOLVER: dict[str, float] = {
     "median_window": 5,      # At most this many readings of one sensor are medianed
     "median_max_age_ms": 500,  # ...and only readings this recent (then: last value)
+    "max_range_rate": 2.0,     # m/s - a range changing faster than a walk is ignored (0 = off)
+    "range_gate_tol_m": 0.12,  # m - noise allowance on top of that
+    "range_rejoin_count": 3,   # this many agreeing rejected readings are accepted after all
     "sector_tol_deg": 6.0,   # Slack before a fix is vetoed for leaving its cone
     "max_gap": 0.35,         # m - circle separation above this is not a real fix
     "pair_spread_warn": 0.25,

@@ -687,6 +687,11 @@ function updateSidebar() {
           fix && fix.worstMiss > SOLVER.sectorTolDeg ? "bad" : "");
   setText("kRes", fix ? MM(fix.residual) : "—");
   setText("kGate", String(Tracker.gateRejects), Tracker.gateRejects > 0 ? "warn" : "");
+  const rej = Tracker.rangeRejects();
+  setText("kRej", Tracker.src === "mouse" ? "—" : sensors.map((sen, i) => `${sen.n} ${rej[i] || 0}`).join(" · "),
+          rej.some(x => x) && Tracker.src !== "mouse" ? "warn" : "");
+  setText("kWobble", Tracker.pos ? `${Tracker.jitterMm.toFixed(0)} mm` +
+    (SOLVER.averageMs > 0 && Tracker.src !== "mouse" ? ` · window ${Math.round(Tracker.avgWindowMs)} ms at ${Tracker.moveSpeed.toFixed(2)} m/s` : "") : "—");
   setText("kReason", Tracker.reason || (
     Tracker.mode === "two-box" ? "clean two-box fix — both boxes agree and the "
       + "fix sits inside every firing sensor's cone" : "—"));
@@ -965,6 +970,10 @@ function initSensorTest() {
   bind("#sDrop", "#vDrop", v => (Sim.drop = v / 100), v => v + " %");
   bind("#sBeam", "#vBeam", v => (Sim.beamOverride = v >= 10 ? v : null), v => (v >= 10 ? v + "° override" : "as configured"));
   bind("#sAlpha", "#vAlpha", v => (Tracker.alpha = v / 100), v => (v / 100).toFixed(2));
+  bind("#sSpike", "#vSpike", v => (Sim.spike = v / 100), v => v + " %");
+  bind("#sRate", "#vRate", v => (SOLVER.maxRangeRate = v / 10), v => (v ? (v / 10).toFixed(1) + " m/s" : "off"));
+  bind("#sAvg", "#vAvg", v => { SOLVER.averageMs = v; if (!v) Tracker.fixHist = []; },
+       v => (v ? v + " ms" : "off (α filter)"));
 
   const on = (id, fn) => { const el = document.getElementById(id); if (el) el.onclick = fn; };
   on("cCapture", () => {

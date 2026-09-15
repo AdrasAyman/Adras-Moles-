@@ -127,6 +127,8 @@
           <div class="kv"><span>Worst sector miss</span><span id="kMiss">—</span></div>
           <div class="kv"><span>RMS residual</span><span id="kRes">—</span></div>
           <div class="kv"><span>Gate rejects</span><span id="kGate">0</span></div>
+          <div class="kv"><span>Readings ignored</span><span id="kRej">—</span></div>
+          <div class="kv"><span>Cursor wobble (2 s)</span><span id="kWobble">—</span></div>
           <div class="kv"><span>Old solver</span><span id="kLegacy">—</span></div>
           <div class="kv"><span>Old vs new</span><span id="kDelta">—</span></div>
           <p class="hint" style="margin-top:0.4rem" id="kReason">—</p>
@@ -208,6 +210,18 @@
             <input type="range" id="sBeam" min="0" max="80" value="0">
           </div>
           <div class="field">
+            <label>Wild readings <b id="vSpike">0 %</b></label>
+            <input type="range" id="sSpike" min="0" max="30" value="0">
+          </div>
+          <div class="field">
+            <label>Walking speed limit <b id="vRate">2.0 m/s</b></label>
+            <input type="range" id="sRate" min="0" max="50" value="20">
+          </div>
+          <div class="field">
+            <label>Averaging window (standing) <b id="vAvg">1000 ms</b></label>
+            <input type="range" id="sAvg" min="0" max="2000" step="50" value="1000">
+          </div>
+          <div class="field">
             <label>Smoothing α <b id="vAlpha">0.35</b></label>
             <input type="range" id="sAlpha" min="5" max="100" value="35">
           </div>
@@ -215,6 +229,13 @@
             Leave the beam at "as configured" to sense with each sensor's own width
             (25° or 50°). Drag it to sense with a different width while the solver still
             assumes the configured one — the mis-calibration test.
+          </p>
+          <p class="hint" style="margin-top:0.4rem">
+            <b>Wild readings</b> injects stray echoes. <b>Walking speed limit</b> ignores
+            readings that change faster than a walk (0 = off). <b>Averaging window</b>
+            smooths the cursor while the player stands still, shrinking to 250 ms as they
+            walk so it doesn't trail behind (0 = off, α filter instead). Watch <i>Cursor wobble</i> in
+            the Solve panel while you hold the pointer still.
           </p>
         </div>
 

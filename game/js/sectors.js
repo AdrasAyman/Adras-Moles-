@@ -81,6 +81,65 @@ class MedianRing {
   }
 }
 
+/* ── Range gate ──────────────────────────────────────────────── */
+/**
+ * Rejects readings from one sensor that no walking player could produce.
+ *
+ * A body can only get closer to or further from a sensor so fast, so a new
+ * reading may differ from that sensor's last ACCEPTED reading by at most
+ * SOLVER.maxRangeRate × (time since) + SOLVER.rangeGateTolM. Anything else is
+ * treated as a glitch (cross-talk, a stray echo off an arm or the wall) and
+ * ignored.
+ *
+ * Two things stop it locking up on a genuine change:
+ *   - the allowance grows with time since the last accepted reading, and
+ *   - if SOLVER.rangeRejoinCount rejected readings in a row agree with each
+ *     other, the player really has moved (or stepped into a different cone),
+ *     so the latest is accepted and becomes the new reference.
+ * A "no echo" (null) is never gated: it isn't a jump, just an absence.
+ */
+class RangeGate {
+  constructor() {
+    this.reset();
+    this.total = 0;       // readings rejected since the page loaded
+  }
+
+  reset() {
+    this.last = null;
+    this.lastT = 0;
+    this.pending = [];
+  }
+
+  /** Is reading v (metres, or null) at time t (ms) plausible? Updates state. */
+  check(v, t) {
+    const rate = SOLVER.maxRangeRate;
+    if (v == null || !(rate > 0) || this.last == null) return this.accept(v, t);
+
+    const allowed = rate * Math.max(0, (t - this.lastT) / 1000) + SOLVER.rangeGateTolM;
+    if (Math.abs(v - this.last) <= allowed) return this.accept(v, t);
+
+    this.pending.push({ v: v, t: t });
+    if (this.pending.length > SOLVER.rangeRejoinCount) this.pending.shift();
+    const agree = this.pending.length >= SOLVER.rangeRejoinCount &&
+      this.pending.every((p, k) => k === 0 ||
+        Math.abs(p.v - this.pending[k - 1].v) <= rate * Math.max(0, (p.t - this.pending[k - 1].t) / 1000) + SOLVER.rangeGateTolM);
+    if (agree) return this.accept(v, t);
+
+    this.total++;
+    this.lastReject = { v: v, t: t, allowed: allowed, from: this.last };
+    return false;
+  }
+
+  accept(v, t) {
+    if (v != null) {
+      this.last = v;
+      this.lastT = t;
+    }
+    this.pending = [];
+    return true;
+  }
+}
+
 /* ── Geometry helpers ────────────────────────────────────────── */
 const DEG = Math.PI / 180.0;
 
