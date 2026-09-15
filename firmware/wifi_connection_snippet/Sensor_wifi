@@ -1,0 +1,139 @@
+
+#define TRIG_PIN1 32
+#define ECHO_PIN1 35
+#define TRIG_PIN2 26
+#define ECHO_PIN2 27
+#define MAX_DIST_CM 800
+#define SAMPLES 5
+#define MEAS_DELAY 15  // ms between each ping in median
+
+
+#include <WiFi.h>
+
+#define BOX_ID 1 // Set to 0 for the AP (Box 0), or 1 for the station (Box 1)
+
+const char* WIFI_SSID   = "Molefield";
+const char* WIFI_PASS   = "molefield123";
+
+float tempC = 23.0;  // fallback temperature
+unsigned long lastTempRead = 0;
+int TRIG_PIN;
+int ECHO_PIN;
+
+void setup() {
+  Serial.begin(115200);
+  pinMode(TRIG_PIN1, OUTPUT);
+  pinMode(TRIG_PIN2, OUTPUT);
+  pinMode(ECHO_PIN1, INPUT);
+  pinMode(ECHO_PIN2, INPUT);
+  digitalWrite(TRIG_PIN1, LOW);
+  digitalWrite(TRIG_PIN2, LOW);
+  TRIG_PIN = TRIG_PIN1;
+  ECHO_PIN = ECHO_PIN1;
+
+  #if BOX_ID == 0
+  // ── Box 0: Broadcasts the standalone Wi-Fi Access Point ──
+  WiFi.mode(WIFI_AP_STA);
+  WiFi.softAP(WIFI_SSID, WIFI_PASS);
+  
+  Serial.printf("\n========================================\n");
+  Serial.printf("Sensor Box 0 created Wi-Fi AP '%s'\n", WIFI_SSID);
+  Serial.printf("AP IP address: %s\n", WiFi.softAPIP().toString().c_str());
+  Serial.printf("Connect your Laptop to '%s' (Pass: '%s')\n", WIFI_SSID, WIFI_PASS);
+  Serial.printf("========================================\n");
+  
+  #else
+  // ── Box 1: Connects to Box 0's Wi-Fi Access Point ──
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(WIFI_SSID, WIFI_PASS);
+  
+  Serial.printf("\nSensor Box %d connecting to AP '%s'...", BOX_ID, WIFI_SSID);
+  int attempts = 0;
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(300);
+    Serial.print(".");
+    attempts++;
+    if (attempts % 30 == 0) {
+      Serial.printf("\nStill trying to connect to '%s'...\n", WIFI_SSID);
+    }
+  }
+  
+  Serial.printf("\n========================================\n");
+  Serial.printf("Sensor Box %d connected to AP!\n", BOX_ID);
+  Serial.printf("Assigned IP: %s\n", WiFi.localIP().toString().c_str());
+  Serial.printf("========================================\n");
+  #endif
+}
+
+float pingCm(float temp) {
+  float sos = 331.4 + 0.606 * temp;  // speed of sound m/s
+  long timeout_us = (long)((MAX_DIST_CM * 2.0 / 100.0 / sos) * 1e6) + 1000;
+
+  digitalWrite(TRIG_PIN, LOW);
+  delayMicroseconds(4);
+  digitalWrite(TRIG_PIN, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(TRIG_PIN, LOW);
+
+  long dur = pulseIn(ECHO_PIN, HIGH, timeout_us);
+  if (dur == 0) return -1;
+
+
+  return (dur * sos) / (2.0 * 10000.0);
+}
+
+float medianPingCm(int n, float temp) {
+  float v[n];
+  for (int i = 0; i < n; i++) {
+    v[i] = pingCm(temp);
+    delay(MEAS_DELAY);
+  }
+  // insertion sort
+  for (int i = 1; i < n; i++) {
+    float key = v[i];
+    int j = i - 1;
+    while (j >= 0 && v[j] > key) {
+      v[j + 1] = v[j];
+      j--;
+    }
+    v[j + 1] = key;
+  }
+  return v[n / 2];
+}
+
+void loop() {
+  // Update temperature every 5 seconds
+
+
+  float dist = medianPingCm(SAMPLES, tempC);
+  //  float dist2 = medianPingCm(SAMPLES, tempC);
+
+  switch (TRIG_PIN) {
+    case TRIG_PIN1:
+      if (dist > 0) {
+        Serial.print("Distance: ");
+        Serial.print(dist, 1);
+        Serial.print(" cm");
+      } else {
+        Serial.print("Out of Range");
+      }
+      Serial.print("  Sensor: 1    ");
+
+      TRIG_PIN = TRIG_PIN2;
+      ECHO_PIN = ECHO_PIN2;
+      break;
+    case TRIG_PIN2:
+      if (dist > 0) {
+        Serial.print(dist, 1);
+        Serial.print("  cm");
+      } else {
+        Serial.print("Out of Range");
+      }
+      Serial.println("  Sensor: 2");
+      TRIG_PIN = TRIG_PIN1;
+      ECHO_PIN = ECHO_PIN1;
+      break;
+  }
+
+  delay(10);
+}
