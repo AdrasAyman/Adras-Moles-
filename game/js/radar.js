@@ -64,7 +64,7 @@ function drawRadar() {
   rctx.fillText("50 cm mount limit", ox + 3, my - 3);
 
   // ── Box Enclosures (Box 1 left, Box 2 right) ──
-  BOXES.forEach(b => {
+  boxesFor(Tracker.layout).forEach(b => {
     const xs = b.idx.map(i => Tracker.sensors[i].x);
     const ys = b.idx.map(i => Tracker.sensors[i].y);
     const [xa, ya] = P(Math.min(...xs), Math.min(...ys));

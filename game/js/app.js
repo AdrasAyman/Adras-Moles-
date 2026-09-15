@@ -23,13 +23,13 @@ function fitStageIfNeeded() {
 function buildSensorRows() {
   const list = $("#sensorList");
   if (!list) return;
-  list.innerHTML = BOXES.map(b => {
+  list.innerHTML = boxesFor(Tracker.layout).map(b => {
     const rows = b.idx.map(i => {
       const sen = Tracker.sensors[i];
       return `
       <div class="sensrow" data-i="${i}">
         <span class="sdot"></span>
-        <span class="slabel">S${i}<small>Box ${b.id} · S${sen.slot}</small></span>
+        <span class="slabel">${sen.n}<small>Box ${b.id} · ${sen.w}°</small></span>
         <span class="sbar"><i></i></span>
         <span class="sval">—</span>
       </div>`;
@@ -41,12 +41,12 @@ function buildSensorRows() {
 function buildLayoutPanel() {
   const wrap = $("#boxLayout");
   if (!wrap) return;
-  wrap.innerHTML = BOXES.map(b => {
+  wrap.innerHTML = boxesFor(Tracker.layout).map(b => {
     const rows = b.idx.map(i => {
       const sen = Tracker.sensors[i];
       return `
         <div class="boxrow" data-i="${i}">
-          <span class="bslot">S${sen.slot}</span>
+          <span class="bslot">${sen.n}</span>
           <span class="bval">—</span>
         </div>`;
     }).join("");
@@ -76,7 +76,18 @@ function displayRange(i, r) {
   return `${shownRange[i].toFixed(2)} m`;
 }
 
+let builtLayout = null;
+
 function updateSensorReadings() {
+  // The bridge can switch between one and two values per box at any time.
+  if (Tracker.layout !== builtLayout) {
+    builtLayout = Tracker.layout;
+    buildSensorRows();
+    buildLayoutPanel();
+    const layHint = $("#layHint");
+    if (layHint) layHint.textContent = LAYOUTS[Tracker.layout].hint;
+  }
+  const ages = Tracker.ages();
   document.querySelectorAll("#sensorList .sensrow").forEach(row => {
     const i = +row.dataset.i;
     const r = Tracker.ranges[i];
@@ -86,7 +97,12 @@ function updateSensorReadings() {
     const val = row.querySelector(".sval");
     if (dot) dot.classList.toggle("ok", has);
     if (bar) bar.style.width = has ? `${Math.min(100, (r / SENSOR_BAR_MAX_M) * 100.0).toFixed(0)}%` : "0%";
-    if (val) val.textContent = displayRange(i, r);
+    if (val) {
+      // Values are held until a sensor sends again; say so once it's been a while.
+      const held = Tracker.src !== "mouse" && ages[i] != null && ages[i] >= 1000;
+      val.textContent = displayRange(i, r) + (held ? ` · ${(ages[i] / 1000).toFixed(1)}s` : "");
+      val.title = ages[i] == null ? "" : `last reading ${ages[i]} ms ago`;
+    }
   });
 
   document.querySelectorAll("#boxLayout .boxrow").forEach(row => {
@@ -100,7 +116,7 @@ function updateSensorReadings() {
   });
 
   document.querySelectorAll("#boxLayout .boxcard").forEach(card => {
-    const box = BOXES.find(b => b.id === +card.dataset.box);
+    const box = boxesFor(Tracker.layout).find(b => b.id === +card.dataset.box);
     const alive = box ? box.idx.some(i => Tracker.ranges[i] != null) : false;
     const dot = card.querySelector(".bdot");
     if (dot) dot.classList.toggle("ok", alive);
@@ -460,6 +476,7 @@ function initApp() {
 
   buildSensorRows();
   buildLayoutPanel();
+  builtLayout = Tracker.layout;
   buildHoles();
   fitStage();
   window.addEventListener("resize", fitStage);

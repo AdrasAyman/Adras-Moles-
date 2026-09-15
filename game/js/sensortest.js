@@ -19,6 +19,7 @@ const SCOL = ["#45D0E8", "#9BE86B", "#FFB020", "#FF7BD5", "#B48CFF", "#FF8A5B"];
 const BIN_DEG = 2.0;            // bearing histogram bin width
 const BIN_LO = -95.0, BIN_HI = 95.0;
 const NBINS = Math.round((BIN_HI - BIN_LO) / BIN_DEG);
+const FRESH_MS = 300;          // calibration only trusts readings this recent
 const MIN_BIN_SAMPLES = 3;   // samples before a bearing bin counts as evidence
 const MIN_BINS = 6;          // distinct bearings needed before a fit is meaningful
 
@@ -81,7 +82,8 @@ function sensorCount() { return Tracker.sensors.length; }
 
 function ensureBuffers() {
   const n = sensorCount();
-  if (ST.hist.length !== n) {
+  if (ST.hist.length !== n || ST.bufLayout !== Tracker.layout) {
+    ST.bufLayout = Tracker.layout;
     ST.hist = [];
     ST.stats = [];
     for (let i = 0; i < n; i++) {
@@ -126,7 +128,15 @@ function recordSample() {
   if (!t.p) return false;
   const sensors = Tracker.sensors;
   const fired = [], ranges = [];
+  const ages = Tracker.ages();
   for (let i = 0; i < sensors.length; i++) {
+    // A held reading was taken wherever the body was when that sensor last
+    // sent — not necessarily at this truth marker. Only fresh readings count.
+    if (Tracker.src !== "mouse" && (ages[i] == null || ages[i] > FRESH_MS)) {
+      fired.push(null);
+      ranges.push(null);
+      continue;
+    }
     const r = Tracker.rawRanges[i];
     fired.push(r != null);
     ranges.push(r);
@@ -145,7 +155,14 @@ function recordSample() {
  *  This is the direct answer to "how far does each sensor actually reach",
  *  so it must run on every measurement — not only during a capture burst. */
 function accumulateStats() {
+  ST.statT = ST.statT || [];
   for (let i = 0; i < ST.stats.length; i++) {
+    // Count each sensor's reading once, not once per solve it was held through.
+    const t = Tracker.sensorT[i];
+    if (Tracker.src !== "mouse") {
+      if (!t || t === ST.statT[i]) continue;
+      ST.statT[i] = t;
+    }
     const r = Tracker.rawRanges[i];
     if (r == null) continue;
     ST.stats[i].min = Math.min(ST.stats[i].min, r);
@@ -434,8 +451,8 @@ function buildSensorRows() {
     tr.innerHTML =
       `<td><span class="swatch" style="background:${SCOL[i % SCOL.length]}"></span>` +
       `${sen.n != null ? sen.n : i}</td>` +
-      `<td id="sraw${i}">—</td><td id="smed${i}">—</td><td id="sech${i}">—</td>` +
-      `<td id="smin${i}">—</td><td id="smax${i}">—</td><td id="sbrg${i}">—</td>`;
+      `<td id="sraw${i}">—</td><td id="smed${i}">—</td><td id="sage${i}">—</td>` +
+      `<td id="shz${i}">—</td><td id="smax${i}">—</td><td id="sbrg${i}">—</td>`;
     body.appendChild(tr);
   });
 }
@@ -625,7 +642,7 @@ const MM = v => (v == null ? "—" : (v * 1000).toFixed(0) + " mm");
 function updateSidebar() {
   const sensors = Tracker.sensors;
   const fix = Tracker.fix;
-  const fills = Tracker.fillRates();
+  const ages = Tracker.ages();
   const t = truthNow();
 
   // Header
@@ -647,10 +664,10 @@ function updateSidebar() {
     const st = ST.stats[i];
     setText("sraw" + i, MM(raw));
     setText("smed" + i, MM(med));
-    setText("sech" + i, Tracker.src === "mouse"
-      ? (raw != null ? "100%" : "0%")
-      : ((fills[i] || 0) * 100).toFixed(0) + "%");
-    setText("smin" + i, st.count ? MM(st.min) : "—");
+    const age = ages[i];
+    setText("sage" + i, Tracker.src === "mouse" || age == null ? "—"
+      : age < 1000 ? `${age} ms` : `${(age / 1000).toFixed(1)} s`, age != null && age >= 2000 && Tracker.src !== "mouse" ? "warn" : "");
+    setText("shz" + i, Tracker.src === "mouse" ? "—" : (Tracker.sensorHz[i] || 0).toFixed(1));
     setText("smax" + i, st.count ? MM(st.max) : "—");
     const ref = t.p || Tracker.pos;
     setText("sbrg" + i, ref ? bearingTo(sen, ref.x, ref.y).toFixed(1) + "°" : "—");
@@ -764,7 +781,7 @@ function exportCSV() {
     const brg = sensors.map(s => bearingTo(s, smp.x, smp.y).toFixed(2));
     rows.push([smp.x.toFixed(4), smp.y.toFixed(4)]
       .concat(smp.ranges.map(r => (r == null ? "" : (r * 1000).toFixed(0))))
-      .concat(smp.fired.map(f => (f ? 1 : 0)))
+      .concat(smp.fired.map(f => (f == null ? "" : f ? 1 : 0)))   // blank = reading too old to use
       .concat(brg).join(","));
   }
   const blob = new Blob([rows.join("\n")], { type: "text/csv" });
@@ -821,8 +838,10 @@ function stLoop(now) {
   ensureBuffers();
   Tracker.update(dt);
 
-  // Capture bursts record one sample per genuinely new measurement.
-  const key = rangeKey();
+  // Capture bursts record one sample per genuinely new measurement. With held
+  // values a reading can repeat exactly, so key on the tracker's solve counter
+  // (mouse mode has no solves: fall back to the readings changing).
+  const key = Tracker.src === "mouse" ? rangeKey() : Tracker.measSeq;
   if (key !== ST.lastKey) {
     ST.lastKey = key;
     accumulateStats();
@@ -836,10 +855,30 @@ function stLoop(now) {
   }
   if (ST.capture.active && now - ST.capture.t0 > 6000) ST.capture.active = false;
 
+  syncLayoutControls();
   drawField();
   drawHistograms();
   updateSidebar();
   requestAnimationFrame(stLoop);
+}
+
+/** Layout buttons mirror Tracker.layout, which the bridge drives in live mode. */
+function syncLayoutControls() {
+  const key = Tracker.layout + "|" + Tracker.src + "|" + Tracker.mixed + "|" + (Tracker.live.boxes || []).length;
+  if (key === ST.layoutUiKey) return;
+  ST.layoutUiKey = key;
+  const live = Tracker.src === "live";
+  document.querySelectorAll("[data-lay]").forEach(b => {
+    b.setAttribute("aria-pressed", String(b.dataset.lay === Tracker.layout));
+    b.disabled = live && b.dataset.lay !== Tracker.layout;
+  });
+  const hint = document.getElementById("stLayHint");
+  if (hint) {
+    hint.textContent = !live ? LAYOUTS[Tracker.layout].hint
+      : !(Tracker.live.boxes || []).length ? "Live: the layout follows what the boxes send. Waiting for packets…"
+      : Tracker.mixed ? "Live: the two boxes are sending different numbers of values — check their firmware."
+      : `Live: detected ${Tracker.sensors.length === 2 ? "one value per box (2 × 50°)" : "two values per box (4 × 25°)"}.`;
+  }
 }
 
 /* ── Wiring ──────────────────────────────────────────────────── */
@@ -898,18 +937,16 @@ function initSensorTest() {
 
   document.querySelectorAll("[data-lay]").forEach(b => {
     b.onclick = () => {
-      document.querySelectorAll("[data-lay]").forEach(o => o.setAttribute("aria-pressed", String(o === b)));
-      Tracker.layout = b.dataset.lay;
-      Tracker.live.ranges = [];
-      Tracker.live.lastKey = "";
-      Tracker.rings = [];
-      Tracker.pos = null;
-      Tracker.fix = null;
+      // In live mode the bridge decides the layout from what the boxes send.
+      if (Tracker.src === "live") { notify("Live layout follows the boxes — it can't be changed here", "warn", 3500); return; }
+      Tracker.setLayout(b.dataset.lay, "user");
       ST.hist = [];
       ST.pristine = null;
       ensureBuffers();
     };
   });
+  const timing = document.getElementById("sTiming");
+  if (timing) timing.onchange = () => { Sim.timing = timing.value; Tracker.simNext = []; };
 
   const wsc = document.getElementById("wsConnect");
   if (wsc) wsc.onclick = () => {
@@ -926,7 +963,7 @@ function initSensorTest() {
   };
   bind("#sNoise", "#vNoise", v => (Sim.noise = v / 1000), v => v + " mm");
   bind("#sDrop", "#vDrop", v => (Sim.drop = v / 100), v => v + " %");
-  bind("#sBeam", "#vBeam", v => (Sim.beamOverride = v), v => v + "°");
+  bind("#sBeam", "#vBeam", v => (Sim.beamOverride = v >= 10 ? v : null), v => (v >= 10 ? v + "° override" : "as configured"));
   bind("#sAlpha", "#vAlpha", v => (Tracker.alpha = v / 100), v => (v / 100).toFixed(2));
 
   const on = (id, fn) => { const el = document.getElementById(id); if (el) el.onclick = fn; };

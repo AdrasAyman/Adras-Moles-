@@ -33,7 +33,8 @@ const Telemetry = (() => {
   const SPIKE_MM = 300;              // raw departs from its own median by this much
   const DROPOUT_MIN = 5;             // consecutive silent measurements (~320 ms)
   const JUMP_M = 0.6;                // raw fix moves this far between measurements
-  const LOW_RATE_HZ = 10;
+  const LONG_HOLD_MS = 2000;          // a sensor whose last value is older than this
+  const HOLD_MISMATCH_MS = SOLVER.holdMismatchMs || 750;   // readings this far apart in one solve
   const LOW_FPS = 30;
   const SUSTAIN_MS = 2000;
 
@@ -49,7 +50,7 @@ const Telemetry = (() => {
     fps: 0, fpsFrames: 0, fpsT: now(), lastFrame: now(),
     // detector state
     prevRaw: null, dropRun: [], cooldown: {},
-    blindSince: null, staleSince: null, lowRateSince: null, lowFpsSince: null,
+    blindSince: null, lowFpsSince: null,
     prevVeto: false, prevSplit: false, prevConflict: false, prevRejects: 0, maxRejects: 0,
     prevWs: null, boxAlive: {}, badPackets: null,
     // game state
@@ -94,7 +95,11 @@ const Telemetry = (() => {
       area: typeof AREA !== "undefined" ? AREA : null,
       alpha: Tracker.alpha,
       thresholds: { spike_mm: SPIKE_MM, dropout_min: DROPOUT_MIN, jump_m: JUMP_M,
-                    low_rate_hz: LOW_RATE_HZ, low_fps: LOW_FPS, sustain_ms: SUSTAIN_MS },
+                    long_hold_ms: LONG_HOLD_MS, hold_mismatch_ms: HOLD_MISMATCH_MS,
+                    low_fps: LOW_FPS, sustain_ms: SUSTAIN_MS },
+      values_per_box: Math.max(1, Math.round(Tracker.sensors.length / 2)),
+      layout_source: Tracker.layoutSource,
+      sim_timing: Tracker.src === "sim" && typeof Sim !== "undefined" ? Sim.timing : null,
       client_started: new Date().toISOString()
     };
   }
@@ -197,9 +202,11 @@ const Telemetry = (() => {
       score: hasG ? G.score : null, level: hasG ? G.li + 1 : null,
       boxes_alive: Tracker.src === "live" ? alive : null
     };
+    const ages = Tracker.src === "mouse" ? [] : Tracker.ages();
     for (let i = 0; i < 4; i++) {
       row["r" + i] = mm(raw[i]);
       row["m" + i] = mm(med[i]);
+      row["a" + i] = ages[i] == null ? null : ages[i];   // ms since that sensor last sent
     }
     S.samples.push(row);
     if (S.samples.length > MAX_BUFFER) S.samples.splice(0, S.samples.length - MAX_BUFFER);
@@ -210,11 +217,11 @@ const Telemetry = (() => {
     S.prevRaw = null;
     S.dropRun = [];
     S.cooldown = {};
-    S.blindSince = S.staleSince = S.lowRateSince = S.lowFpsSince = null;
+    S.blindSince = S.lowFpsSince = null;
     S.prevVeto = S.prevSplit = S.prevConflict = false;
     S.prevRejects = S.maxRejects = 0;
-    S.liveSeen = false;
-    S.seqAtStart = Tracker.measSeq;   // measSeq is page-global; only count this session's data
+    S.mixed = false;
+    S.lastSensorT = [];
     S.alarm = false;
     S.moles.clear();
   }
@@ -226,7 +233,18 @@ const Telemetry = (() => {
     const fix = Tracker.fix;
     const sensors = Tracker.sensors;
 
+    const ages = Tracker.ages();
+    S.lastSensorT = S.lastSensorT || [];
     for (let i = 0; i < sensors.length; i++) {
+      // Sensors upstream on their own schedules: only judge a sensor on a reading
+      // it actually just sent, never on a value it is merely holding.
+      const tNew = Tracker.sensorT[i];
+      if (!tNew || tNew === S.lastSensorT[i]) continue;
+      const gapMs = S.lastSensorT[i] ? tNew - S.lastSensorT[i] : 0;
+      S.lastSensorT[i] = tNew;
+      if (gapMs >= LONG_HOLD_MS) {
+        event("anomaly", "long_hold", { sensor: i, name: sensors[i].n, duration_ms: Math.round(gapMs) });
+      }
       const r = raw[i], m = med[i];
       // Spike: a reading far from its own recent median (cross-talk / multipath suspect)
       if (r != null && m != null && Math.abs(r - m) > SPIKE_MM / 1000) {
@@ -250,6 +268,15 @@ const Telemetry = (() => {
         const partnerEcho = sensors.some((s, j) => j !== i && s.x === sensors[i].x && s.y === sensors[i].y && raw[j] != null);
         if (partnerEcho) run.partner++;
       }
+    }
+
+    // Held-value mismatch: one solve combined readings taken far apart in time,
+    // so the position mixes where the body was then with where it is now.
+    if (fix && fix.mode === "two-box" && Tracker.ageSpreadMs >= HOLD_MISMATCH_MS) {
+      limited("holdmismatch", 1000, () => event("anomaly", "held_mismatch", {
+        age_spread_ms: Tracker.ageSpreadMs,
+        ages_ms: ages.slice(0, sensors.length)
+      }));
     }
 
     if (fix) {
@@ -289,18 +316,11 @@ const Telemetry = (() => {
   function detectContinuous() {
     const n = now();
     if (Tracker.src === "live") {
-      // Stale only means something once data has actually flowed in this session;
-      // before the first frame the tracker is "stale" by definition.
-      if (Tracker.measSeq > S.seqAtStart) S.liveSeen = true;
-      if (Tracker.stale && S.liveSeen) {
-        if (S.staleSince == null) S.staleSince = n;
-      } else if (S.staleSince != null) {
-        // The collector can run a frame before the tracker clears its stale flag,
-        // so ignore sub-400 ms blips: stale means frames stopped for 400 ms+.
-        const dur = Math.round(n - S.staleSince);
-        if (dur >= 400) event("anomaly", "stale", { duration_ms: dur });
-        S.staleSince = null;
-      }
+      // Held values never go stale any more; what can go wrong is the boxes
+      // disagreeing about how many values they send.
+      if (Tracker.mixed && !S.mixed) event("anomaly", "mixed_values", {
+        boxes: (Tracker.live.boxes || []).map(b => ({ box: b.box + 1, values: b.values })) });
+      S.mixed = Tracker.mixed;
       if (Tracker.wsState !== S.prevWs) {
         if (S.prevWs != null) event("system", "ws_state", { state: Tracker.wsState });
         S.prevWs = Tracker.wsState;
@@ -320,15 +340,6 @@ const Telemetry = (() => {
         }
         S.badPackets = hub.bad;
       }
-    }
-    if (Tracker.src !== "mouse") {
-      const low = Tracker.measHz > 0 && Tracker.measHz < LOW_RATE_HZ && !Tracker.stale;
-      if (low) {
-        if (S.lowRateSince == null) S.lowRateSince = n;
-        if (n - S.lowRateSince > SUSTAIN_MS) {
-          limited("lowrate", 5000, () => event("anomaly", "low_rate", { hz: r1(Tracker.measHz) }));
-        }
-      } else S.lowRateSince = null;
     }
     if (S.fps > 0 && S.fps < LOW_FPS && document.visibilityState === "visible") {
       if (S.lowFpsSince == null) S.lowFpsSince = n;
@@ -505,7 +516,7 @@ const Telemetry = (() => {
     else if (S.online === false) { state = "offline"; label = "OFFLINE"; }
     else if (S.sid == null) { state = "idle"; label = "…"; }
     else { state = "rec"; label = "REC " + compact(S.sent.samples + S.samples.length); }
-    dot.className = "recdot " + state;
+    dot.className = "recdot is-" + state;   // prefixed: a bare "rec" would pick up the .rec button style
     txt.textContent = label;
     if (btn) {
       btn.title = S.paused ? "Recording paused — click to resume"

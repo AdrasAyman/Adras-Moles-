@@ -107,10 +107,11 @@
             </div>
             <button class="cta ghost" id="setupConnect" style="width:100%;margin-top:0.5rem;padding:0.5rem">Connect</button>
             <div class="readout" style="margin-top:0.5rem"><span>Connection</span><span id="setupWsState">closed</span></div>
+            <div class="readout"><span>Detected sensors</span><span id="setupMode">waiting for packets</span></div>
             <table class="boxtable" id="boxTable">
-              <thead><tr><th></th><th>Box</th><th>IP</th><th>Rate</th><th>Last packet</th></tr></thead>
+              <thead><tr><th></th><th>Box</th><th>IP</th><th>Sends</th><th>Rate</th><th>Last packet</th></tr></thead>
               <tbody id="boxTableBody">
-                <tr><td colspan="5" class="hint">Not connected yet.</td></tr>
+                <tr><td colspan="6" class="hint">Not connected yet.</td></tr>
               </tbody>
             </table>
           </div>
@@ -169,7 +170,7 @@
   "t": 184213,
   "ranges": [1420, 1655] }</pre>
             <p class="hint">
-              Box 1 is the left-hand box (slots S0, S1) and Box 2 is the right-hand box (slots S2, S3). Within each box, <code>S1</code> is the outer sensor and <code>S2</code> the inner, splayed one. Frames older than 400 ms are treated as stale.
+              Box 0 is the left-hand box and Box 1 the right-hand box. Each box sends either <b>one</b> value (a normalised reading, treated as one 50° sensor) or <b>two</b> (two 25° sensors); the bridge detects which. Boxes may send whenever they like — each sensor's last value is kept until it sends a new one.
             </p>
           </details>
         </div>

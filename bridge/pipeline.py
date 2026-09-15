@@ -1,6 +1,10 @@
 """
-Data Pipeline: Pushes merged range frames to connected game clients at a fixed frame rate
-and records synchronized telemetry to CSV for engineering analysis and design reviews.
+Data Pipeline: streams sensor frames to the game over WebSocket, and records
+telemetry to CSV for engineering analysis (--log).
+
+Frames are pushed as soon as any box sends a packet (with a periodic refresh
+for health), because boxes now upstream at their own discretion rather than on
+a fixed slot schedule.
 """
 
 from __future__ import annotations
@@ -9,69 +13,86 @@ import json
 import math
 import threading
 import time
-from typing import Any, Sequence, TextIO
-from bridge.config import SOLVER
+from typing import Any, TextIO
+
+from bridge.config import LAYOUTS, SOLVER
 from bridge.hub import SensorHub
 from bridge.sectors import MedianRing, solve_sectors
 from bridge.websocket_server import WebSocketServer
+
+MAX_SENSORS = 4
 
 
 def pump(
     hub: SensorHub,
     ws: WebSocketServer,
-    sensors: Sequence[tuple[float, float, float]],
     rate: float,
     writer: Any,
     stop: threading.Event,
     logfile: TextIO | None = None,
 ):
     """
-    Main frame pump running at `rate` FPS.
-    Snapshots the latest sensor ranges, streams JSON over WebSocket,
-    and optionally logs positions to CSV.
+    Broadcast a frame whenever the hub changes, and at least every 1/`rate` s.
+
+    Frame: {t, layout, values_per_box, detected, mixed, ranges (mm), seq, age_ms,
+            boxes (health), hub (packet counters)}
+    `seq[i]` increments each time sensor i sends a new reading, so clients can
+    tell new readings from held ones.
     """
     period = 1.0 / rate
-    nxt = time.monotonic()
     t0 = time.monotonic()
     last_flush = t0
 
-    # Median rings mirror the browser's filter so the CSV matches what the
-    # game actually solved from. Only genuinely new range vectors are pushed:
-    # this pump runs faster than the sensors ping, so most frames are repeats.
-    rings = [MedianRing(int(SOLVER["median_window"])) for _ in sensors]
-    last_key: tuple | None = None
+    layout = None
+    rings: list[MedianRing] = []
+    last_seq: list[int] = []
     prev_fix: dict | None = None
 
     while not stop.is_set():
-        r = hub.snapshot()
+        hub.changed.wait(period)
+        hub.changed.clear()
+        snap = hub.snapshot()
+        r = snap["ranges"]
 
-        # Broadcast frame to WebSocket clients, including per-box health so the
-        # site's setup wizard can show which sensor boxes are actually reporting.
         frame_payload = {
             "t": int((time.monotonic() - t0) * 1000),
+            "layout": snap["layout"],
+            "values_per_box": snap["values_per_box"],
+            "detected": snap["detected"],
+            "mixed": snap["mixed"],
             "ranges": [None if v is None else round(v * 1000) for v in r],
+            "seq": snap["seq"],
+            "age_ms": snap["age_ms"],
             "boxes": hub.health(),
-            "hub": {"frames": hub.frames, "bad": hub.bad},
+            "hub": {"frames": hub.frames, "bad": hub.bad, "switches": hub.switches},
         }
         ws.broadcast(json.dumps(frame_payload))
 
-        # Optional CSV logging with offline position solution
         if writer:
-            key = tuple(None if v is None else round(v * 1000) for v in r)
-            if key != last_key:
-                last_key = key
-                for i, ring in enumerate(rings):
-                    ring.push(r[i] if i < len(r) else None)
-            med = [ring.value() for ring in rings]
-
+            now = time.monotonic()
+            if snap["layout"] != layout:
+                layout = snap["layout"]
+                rings = [MedianRing(int(SOLVER["median_window"])) for _ in r]
+                last_seq = [0] * len(r)
+                prev_fix = None
+            fresh = False
+            for i, ring in enumerate(rings):
+                if snap["seq"][i] != last_seq[i]:
+                    last_seq[i] = snap["seq"][i]
+                    ring.push(r[i], now)
+                    fresh = True
+            if not fresh:
+                continue
+            max_age = SOLVER["median_max_age_ms"] / 1000.0
+            med = [ring.value(now, max_age) for ring in rings]
+            sensors = LAYOUTS[layout]
             fix = solve_sectors(med, sensors, prev_fix)
             if fix["x"] is not None:
                 prev_fix = {"x": fix["x"], "y": fix["y"]}
 
-            elapsed_str = f"{time.monotonic() - t0:.3f}"
-            raw_cols = ["" if v is None else round(v * 1000) for v in r]
-            med_cols = ["" if v is None else round(v * 1000) for v in med]
-
+            pad = lambda vals: (vals + [None] * MAX_SENSORS)[:MAX_SENSORS]
+            mm = lambda v: "" if v is None else round(v * 1000)
+            ages = pad(list(snap["age_ms"]))
             fix_cols = [
                 "" if fix["x"] is None else f"{fix['x']:.4f}",
                 "" if fix["y"] is None else f"{fix['y']:.4f}",
@@ -85,11 +106,10 @@ def pump(
                 sum(1 for v in med if v is not None),
                 fix["reason"],
             ]
-            writer.writerow([elapsed_str] + raw_cols + med_cols + fix_cols)
+            writer.writerow([f"{now - t0:.3f}", layout]
+                            + [mm(v) for v in pad(r)] + [mm(v) for v in pad(med)]
+                            + ["" if a is None else a for a in ages] + fix_cols)
 
-            if logfile and (time.monotonic() - last_flush > 1.0):
+            if logfile and (now - last_flush > 1.0):
                 logfile.flush()
-                last_flush = time.monotonic()
-
-        nxt += period
-        time.sleep(max(0.0, nxt - time.monotonic()))
+                last_flush = now

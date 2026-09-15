@@ -14,7 +14,7 @@ from typing import Any, Sequence
 
 from bridge.telemetry_db import MAX_SENSORS, SAMPLE_COLS, TelemetryStore
 
-SUMMARY_VERSION = 1
+SUMMARY_VERSION = 2   # 2: configuration label, per-sensor update rates and hold times
 MODES = ("two-box", "one-box", "blind", "mouse")
 HIST_BIN_MM = 50
 HIST_MAX_MM = 2500
@@ -100,6 +100,18 @@ def summarize(store: TelemetryStore, session_id: int) -> dict[str, Any] | None:
         if isinstance(si, int) and 0 <= si < n_sensors:
             per_sensor_anom[si][e["type"]] = per_sensor_anom[si].get(e["type"], 0) + 1
 
+    # sensor configuration, taken from what the session itself recorded
+    msens = [x for x in (meta.get("sensors") or []) if isinstance(x, dict)]
+    widths = sorted({float(x["w"]) for x in msens if isinstance(x.get("w"), (int, float))})
+    config = {
+        "n_sensors": n_sensors,
+        "values_per_box": meta.get("values_per_box") or max(1, round(n_sensors / 2)),
+        "widths_deg": widths,
+        "label": f"{n_sensors} sensors" + (f" · {'/'.join(f'{w:g}' for w in widths)}°" if widths else ""),
+        "names": [str(x.get("n", i)) for i, x in enumerate(msens)][:n_sensors],
+        "sim_timing": meta.get("sim_timing"),
+    }
+
     # sensors
     live_rows = [r for r in rows if r[ix["src"]] != "mouse"] or rows
     sensors = []
@@ -112,6 +124,22 @@ def summarize(store: TelemetryStore, session_id: int) -> dict[str, Any] | None:
         for e in events:
             if e["type"] == "dropout" and e["data"].get("sensor") == i:
                 longest = max(longest, int(e["data"].get("duration_ms") or 0))
+
+        # Update timing from the recorded value ages (sessions from v2 on). A new
+        # reading shows up as the age dropping; the gap before it is how long the
+        # previous value was held.
+        updates, intervals, holds = 0, [], []
+        prev = None
+        for r in live_rows:
+            a = r[ix[f"a{i}"]]
+            if a is None:
+                continue
+            holds.append(a)
+            if prev is not None and a < prev[0]:
+                updates += 1
+                intervals.append(prev[0] + (r[ix["t"]] - prev[1]) - a)
+            prev = (a, r[ix["t"]])
+        span_s = ((live_rows[-1][ix["t"]] - live_rows[0][ix["t"]]) / 1000.0) if len(live_rows) > 1 else 0
         sensors.append({
             "index": i,
             "echo_rate": (sum(1 for x in live_raw if x is not None) / len(live_raw)) if live_raw else None,
@@ -121,6 +149,12 @@ def summarize(store: TelemetryStore, session_id: int) -> dict[str, Any] | None:
             "spikes": per_sensor_anom[i].get("spike", 0),
             "dropouts": per_sensor_anom[i].get("dropout", 0),
             "longest_dropout_ms": longest,
+            "has_timing": bool(holds),
+            "updates": updates if holds else None,
+            "update_hz": (updates / span_s) if holds and span_s > 0 else None,
+            "hold_ms": describe(holds),
+            "interval_ms": describe(intervals),
+            "long_holds": per_sensor_anom[i].get("long_hold", 0),
         })
 
     # solver
@@ -151,6 +185,12 @@ def summarize(store: TelemetryStore, session_id: int) -> dict[str, Any] | None:
         "spread": describe([r[ix["spread"]] for r in fixed]),
         "sector_miss": describe([r[ix["miss"]] for r in fixed]),
         "gate_reject_samples": sum(1 for r in solver_rows if (r[ix["gate"]] or 0) > 0),
+        "age_spread_ms": describe([
+            max(ages) - min(ages) for ages in (
+                [r[ix[f"a{i}"]] for i in range(n_sensors)
+                 if r[ix[f"a{i}"]] is not None and r[ix[f"m{i}"]] is not None]
+                for r in fixed if r[ix["mode"]] == "two-box")
+            if len(ages) > 1]),
         "raw_vs_filtered_mm": describe([
             1000.0 * math.hypot(r[ix["x_raw"]] - r[ix["x"]], r[ix["y_raw"]] - r[ix["y"]])
             for r in fixed if None not in (r[ix["x_raw"]], r[ix["y_raw"]], r[ix["x"]], r[ix["y"]])]),
@@ -265,6 +305,7 @@ def summarize(store: TelemetryStore, session_id: int) -> dict[str, Any] | None:
         "n_samples": len(rows),
         "n_events": len(events),
         "n_sensors": n_sensors,
+        "config": config,
         "src_counts": src_counts,
         "rates": {"meas_hz": describe([x for x in col("meas_hz") if x]),
                   "fps": describe([x for x in col("fps") if x])},
@@ -297,7 +338,8 @@ def series(store: TelemetryStore, session_id: int, buckets: int = 600) -> dict[s
     nb = buckets
 
     numeric = ([f"r{i}" for i in range(MAX_SENSORS)] + [f"m{i}" for i in range(MAX_SENSORS)] +
-               ["sigma", "gap", "spread", "miss", "meas_hz", "fps", "score", "x", "y", "err"])
+               ["sigma", "gap", "spread", "miss", "meas_hz", "fps", "score", "x", "y", "err"] +
+               [f"a{i}" for i in range(MAX_SENSORS)])
     acc = {c: {"sum": [0.0] * nb, "cnt": [0] * nb, "min": [None] * nb, "max": [None] * nb} for c in numeric}
     mode_cnt = {m: [0] * nb for m in MODES}
     veto_cnt = [0] * nb
@@ -354,9 +396,15 @@ def trend_row(sess: dict) -> dict[str, Any]:
     solver = s.get("solver") or {}
     game = s.get("game") or {}
     rates = s.get("rates") or {}
+    cfg = s.get("config") or {}
+    acc = s.get("accuracy") or {}
     return {
         "id": sess["id"], "started_at": sess["started_at"], "page": sess["page"], "src": sess["src"],
         "layout": sess["layout"], "label": sess["label"],
+        "n_sensors": cfg.get("n_sensors") or s.get("n_sensors"),
+        "config": cfg.get("label"),
+        "error_median_mm": (acc.get("raw_fix_mm") or {}).get("median"),
+        "age_spread_median_ms": (solver.get("age_spread_ms") or {}).get("median"),
         "duration_s": s.get("duration_s"), "n_samples": sess["n_samples"],
         "two_box_share": None if sess["src"] == "mouse" else (solver.get("mode_share") or {}).get("two-box"),
         "blind_share": None if sess["src"] == "mouse" else (solver.get("mode_share") or {}).get("blind"),

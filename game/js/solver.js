@@ -8,7 +8,11 @@
 const Sim = {
   noise: 0.008,      // Range noise std dev in metres (8 mm)
   drop: 0.03,        // Missing echo probability (3%)
-  beamOverride: 40   // FULL beam width (deg) used when SENSING, or null to use
+  timing: "regular", // "regular": every box at SOLVER.measureHz
+                     // "irregular": box 1 ~every 100 ms with jitter, box 2 at
+                     // random intervals (mean ~700 ms) — boxes that upstream
+                     // at their own discretion, as the hardware now may
+  beamOverride: null // FULL beam width (deg) used when SENSING, or null to use
                      // each sensor's calibrated `w`. Setting this to something
                      // other than the calibrated width simulates a MIS-CALIBRATED
                      // rig — sense at one width, solve at another — which is the

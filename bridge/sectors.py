@@ -27,23 +27,39 @@ Y_VIS_TOP = 0.20  # mirrors AREA.yVisTop in game/js/config.js
 
 
 class MedianRing:
-    """Rolling median over the last `n` samples. None means 'no echo'."""
+    """
+    Rolling median of one sensor's own readings. None means 'no echo'.
+
+    Push only when that sensor actually sent a new reading. With `max_age`
+    set, value() considers just the readings from the last `max_age` seconds,
+    and always at least the latest one - so a sensor that upstreams rarely
+    yields its last value instead of being outvoted by old copies of itself.
+    """
 
     def __init__(self, n: int):
         self.n = max(1, int(n))
-        self.buf: list[float | None] = []
+        self.buf: list[tuple[float | None, float]] = []
 
-    def push(self, v: float | None) -> None:
-        self.buf.append(v)
+    def push(self, v: float | None, t: float = 0.0) -> None:
+        self.buf.append((v, t))
         while len(self.buf) > self.n:
             self.buf.pop(0)
 
-    def value(self) -> float | None:
-        present = sorted(x for x in self.buf if x is not None)
+    def _window(self, now: float | None, max_age: float | None) -> list[float | None]:
+        if not self.buf:
+            return []
+        if now is None or max_age is None:
+            return [v for v, _ in self.buf]
+        recent = [v for v, t in self.buf if now - t <= max_age]
+        return recent or [self.buf[-1][0]]
+
+    def value(self, now: float | None = None, max_age: float | None = None) -> float | None:
+        win = self._window(now, max_age)
+        present = sorted(x for x in win if x is not None)
         if not present:
             return None
         # Mostly dropouts -> report no echo rather than a stale median.
-        if len(self.buf) >= self.n and len(present) * 2 < len(self.buf):
+        if len(present) * 2 < len(win):
             return None
         m = len(present) // 2
         if len(present) % 2:
@@ -53,7 +69,7 @@ class MedianRing:
     def fill(self) -> float:
         if not self.buf:
             return 0.0
-        return sum(1 for x in self.buf if x is not None) / len(self.buf)
+        return sum(1 for v, _ in self.buf if v is not None) / len(self.buf)
 
     def clear(self) -> None:
         self.buf.clear()

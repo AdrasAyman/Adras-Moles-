@@ -8,8 +8,7 @@ import argparse
 import sys
 import threading
 import time
-from typing import Sequence
-from bridge.config import DEFAULTS, LAYOUTS
+from bridge.config import DEFAULTS, LAYOUT_NAMES, LAYOUTS
 from bridge.hub import SensorHub
 from bridge.sectors import solve_sectors
 from bridge.websocket_server import WebSocketServer
@@ -17,30 +16,9 @@ from bridge.websocket_server import WebSocketServer
 DIVIDER_BAR: str = "-" * 62
 
 
-def parse_map(spec: str, n_sensors: int) -> dict[int, list[int]]:
-    """
-    Parses a box-to-sensor map string into a dictionary.
-    Example:
-        '0:0,1 1:2,3' -> {0: [0, 1], 1: [2, 3]}
-    """
-    if not spec:
-        per_box = 2
-        return {
-            b: [b * per_box + i for i in range(per_box)]
-            for b in range((n_sensors + per_box - 1) // per_box)
-        }
-
-    out: dict[int, list[int]] = {}
-    for part in spec.split():
-        box_str, idxs_str = part.split(":")
-        out[int(box_str)] = [int(i) for i in idxs_str.split(",")]
-    return out
-
-
 def status_loop(
     hub: SensorHub,
     ws: WebSocketServer,
-    sensors: Sequence[tuple[float, float, float]],
     stop: threading.Event,
 ):
     """
@@ -48,12 +26,15 @@ def status_loop(
     """
     time.sleep(1.0)
     while not stop.is_set():
-        r = hub.snapshot()
+        snap = hub.snapshot()
+        r = snap["ranges"]
         n = sum(1 for v in r if v is not None)
-        fix = solve_sectors(r, sensors)
+        fix = solve_sectors(r, LAYOUTS[snap["layout"]])
 
+        names = LAYOUT_NAMES.get(snap["layout"], [str(i) for i in range(len(r))])
         cells = " ".join(
-            f"{i}:{'----' if v is None else f'{v * 1000.0:4.0f}'}"
+            f"{names[i]}:{'----' if v is None else f'{v * 1000.0:4.0f}'}"
+            + ("" if snap["age_ms"][i] is None or snap["age_ms"][i] < 1000 else f"({snap['age_ms'][i] / 1000:.0f}s)")
             for i, v in enumerate(r)
         )
         if fix["x"] is None:
@@ -63,15 +44,17 @@ def status_loop(
             flag = " VETO" if fix["veto"] else ""
             pos = (
                 f"{tag} x={fix['x']:.2f} y={fix['y']:.2f} "
-                f"+-{fix['sigma'] * 1000.0:3.0f}mm gap={fix['gap'] * 1000.0:3.0f}mm{flag}"
+                f"+-{fix['sigma'] * 1000.0:3.0f}mm{flag}"
             )
+        mode = (f"{snap['values_per_box']} val/box" + ("" if snap["detected"] else "?")
+                + (" MIXED" if snap["mixed"] else ""))
         boxes = " ".join(
-            f"box{b}:{v['hz']:4.1f}Hz{'' if v['alive'] else ' DEAD'}"
+            f"box{b + 1}:{v['hz']:4.1f}Hz{'' if v['alive'] else ' OFF'}"
             for b, v in hub.live_boxes()
         ) or "no boxes reporting"
 
         sys.stdout.write(
-            f"\r  {n}/{len(r)} echoes | {cells} | {pos} | {boxes} | "
+            f"\r  {mode} | {n}/{len(r)} echoes | {cells} | {pos} | {boxes} | "
             f"games:{ws.count}   "
         )
         sys.stdout.flush()
@@ -88,15 +71,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
-        "--layout",
-        choices=list(LAYOUTS.keys()),
-        default="2box4s",
-        help="sensor geometry; must match the game sidebar",
-    )
-    parser.add_argument(
-        "--map",
-        default="",
-        help='box to sensor-index map, e.g. "0:0,1 1:2,3"',
+        "--values",
+        type=int,
+        choices=(1, 2),
+        default=2,
+        help="values per box to assume until packets arrive and the real count "
+             "is detected (1 = one 50 deg sensor per box, 2 = two 25 deg sensors)",
     )
     parser.add_argument("--http", type=int, default=d["http"], help="HTTP port")
     parser.add_argument("--ws", type=int, default=d["ws"], help="WebSocket port")
@@ -118,12 +98,26 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--stale-ms",
         type=int,
         default=d["stale_ms"],
-        help="drop a sensor's range if it is older than this (ms)",
+        help="expire a sensor's value after this long without an update (ms); "
+             "0 holds each sensor's last value indefinitely",
     )
     parser.add_argument(
         "--simulate",
         action="store_true",
         help="synthesise a walking body instead of reading hardware",
+    )
+    parser.add_argument(
+        "--sim-values",
+        type=int,
+        choices=(1, 2),
+        default=2,
+        help="simulated boxes send this many values each",
+    )
+    parser.add_argument(
+        "--sim-timing",
+        choices=("regular", "irregular"),
+        default="regular",
+        help="simulated upstream timing: fixed rate, or one fast jittery box and one random box",
     )
     parser.add_argument(
         "--noise",

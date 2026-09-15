@@ -8,8 +8,9 @@
         without the lag a moving average would cost).
      2. BOOLEAN SECTORS. Which sensors in a box fired — and just as
         importantly, which stayed silent — constrains the bearing to
-        an angular sector. Because the two sensors in a box overlap
-        by ~15 deg, each box yields THREE sectors, not two.
+        an angular sector. Two 25 deg sensors per box tile its 50 deg
+        field into two sectors; one 50 deg sensor per box gives one.
+        (Overlapping cones would add a third, narrow, sector.)
      3. CLOSED-FORM circle intersection. Exact, ~1000x cheaper than
         the grid search, and it exposes the non-intersection case
         (`gap`) that a least-squares residual mathematically cannot
@@ -26,31 +27,53 @@
    ══════════════════════════════════════════════════════════════ */
 
 /* ── Median ring buffer ──────────────────────────────────────── */
+/**
+ * Rolling median of ONE sensor's own readings.
+ *
+ * Push only when that sensor actually sends a new reading. value(now, maxAge)
+ * considers just the readings from the last `maxAge` ms — and always at least
+ * the latest one. That matters now that boxes upstream at their own pace:
+ * a sensor updating 10x a second gets a proper median of its recent readings,
+ * while a sensor that updates once every two seconds simply yields its last
+ * value, instead of having a new reading outvoted by old copies of itself.
+ */
 class MedianRing {
   constructor(n) {
     this.n = Math.max(1, n | 0);
     this.buf = [];
   }
 
-  push(v) {
-    this.buf.push(v == null ? null : v);
+  push(v, t) {
+    this.buf.push({ v: v == null ? null : v, t: t == null ? 0 : t });
     while (this.buf.length > this.n) this.buf.shift();
   }
 
-  /** Median of the present samples, or null if the window is mostly dropouts. */
-  value() {
-    const present = this.buf.filter(x => x != null);
+  window(now, maxAge) {
+    if (!this.buf.length) return [];
+    if (now == null || maxAge == null) return this.buf.map(e => e.v);
+    const recent = this.buf.filter(e => now - e.t <= maxAge).map(e => e.v);
+    return recent.length ? recent : [this.buf[this.buf.length - 1].v];
+  }
+
+  /** Median of the readings in the window, or null if they are mostly dropouts. */
+  value(now, maxAge) {
+    const win = this.window(now, maxAge);
+    const present = win.filter(x => x != null);
     if (!present.length) return null;
-    if (this.buf.length >= this.n && present.length * 2 < this.buf.length) return null;
+    if (present.length * 2 < win.length) return null;
     present.sort((a, b) => a - b);
     const m = present.length >> 1;
     return present.length % 2 ? present[m] : (present[m - 1] + present[m]) / 2;
   }
 
-  /** Fraction of the window that carried an echo — a live dropout rate. */
+  /** Fraction of buffered readings that carried an echo. */
   fill() {
     if (!this.buf.length) return 0;
-    return this.buf.filter(x => x != null).length / this.buf.length;
+    return this.buf.filter(e => e.v != null).length / this.buf.length;
+  }
+
+  latest() {
+    return this.buf.length ? this.buf[this.buf.length - 1] : null;
   }
 
   clear() {

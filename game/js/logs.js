@@ -26,8 +26,11 @@ const ANOMALY_INFO = {
   sector_conflict: ["Sector conflict", "Which sensors fired is impossible under the current cone calibration."],
   jump: ["Position jump", "The raw fix moved more than 0.6 m between consecutive measurements."],
   gate_reject: ["Velocity gate", "Measurements implied faster than 4 m/s movement and were rejected by the tracker."],
-  stale: ["Stale data", "Live frames stopped arriving for more than 400 ms."],
-  low_rate: ["Low measurement rate", "Fewer than 10 measurements per second for over 2 s."],
+  long_hold: ["Long hold", "A sensor went 2 s or more without sending a new reading, so the game kept computing with its last value."],
+  held_mismatch: ["Held-value mismatch", "One solve combined readings taken 750 ms or more apart, so the fix mixes where the player was then with where they are now."],
+  mixed_values: ["Mixed value counts", "One box was sending one value while the other sent two; the layout was kept and the odd box's packets were ignored."],
+  stale: ["Stale data (older sessions)", "Before hold-last-value: live frames stopped arriving for more than 400 ms."],
+  low_rate: ["Low measurement rate (older sessions)", "Before hold-last-value: fewer than 10 measurements per second for over 2 s."],
   fps_drop: ["Low render rate", "The page rendered below 30 fps for over 2 s."],
   box_down: ["Box offline", "The bridge stopped hearing from a sensor box."],
   bad_packets: ["Bad packets", "The bridge received datagrams it could not parse."]
@@ -134,9 +137,10 @@ function filtered() {
   const q = document.getElementById("fSearch").value.trim().toLowerCase();
   const pg = document.getElementById("fPage").value;
   const src = document.getElementById("fSrc").value;
+  const cfg = document.getElementById("fCfg").value;
   const hideShort = document.getElementById("fShort").checked;
   return L.sessions.filter(s =>
-    (!pg || s.page === pg) && (!src || s.src === src) &&
+    (!pg || s.page === pg) && (!src || s.src === src) && (!cfg || String(s.n_sensors) === cfg) &&
     (!hideShort || s.open || (s.duration_s || 0) >= 10) &&
     (!q || (s.label || "").toLowerCase().includes(q) || (s.notes || "").toLowerCase().includes(q) || String(s.id) === q));
 }
@@ -165,7 +169,7 @@ function renderList() {
       s.open ? h("span", { class: "chipx live", text: "● recording" }) : null,
       h("span", { class: "chipx", text: s.page === "bench" ? "sensor test" : "game" }),
       h("span", { class: "chipx", text: s.src }),
-      h("span", { class: "chipx", text: s.layout })),
+      h("span", { class: "chipx", text: s.config || s.layout })),
     h("div", { class: "nums" },
       h("span", {}, h("b", { text: fmtDur(s.duration_s) })),
       h("span", {}, h("b", { text: Viz.num(s.n_samples, 0) }), " samples"),
@@ -259,7 +263,8 @@ function renderSession(sess, series, events) {
         h("span", { text: fmtWhen(sess.started_at) }),
         h("span", { text: sess.page === "bench" ? "sensor test" : "game" }),
         h("span", { text: `source: ${sess.src}` }),
-        h("span", { text: `layout: ${sess.layout}` }),
+        h("span", { text: `sensors: ${dig(S, "config.label") || sess.layout}` }),
+        dig(S, "config.sim_timing") ? h("span", { text: `sim timing: ${S.config.sim_timing}` }) : null,
         sess.open ? h("span", { style: "color:var(--alarm)", text: "● still recording — refreshes every 5 s" }) : null)),
     h("div", { class: "actions" },
       h("a", { class: "cta ghost", href: `/api/sessions/${sess.id}/samples.csv`, text: "Samples CSV" }),
@@ -301,6 +306,16 @@ function renderSession(sess, series, events) {
       "Line: median-filtered range. Shaded band: min–max of the raw readings in each time slice, so spikes show as sudden band flares.",
       el => Viz.line(el, { x: series.t, series: rangeSeries, yUnit: "mm", height: 280 }), { wide: true })));
   }
+  const ageSeries = [];
+  for (let i = 0; i < nS; i++) {
+    const a = st["a" + i];
+    if (a) ageSeries.push({ name: sensorName(i), color: color(SENSOR_COLORS[i]), values: a.max });
+  }
+  if (ageSeries.length && sess.src !== "mouse") {
+    sensorsGrid.appendChild(add(card("How old each sensor's value was",
+      "Boxes send whenever they like and the game holds each sensor's last value. This is how long ago each value was sent (the oldest in each time slice). A saw-tooth means regular updates; tall teeth mean long holds.",
+      el => Viz.line(el, { x: series.t, series: ageSeries, yUnit: "ms", height: 240 }), { wide: true })));
+  }
   const sensors = S.sensors || [];
   if (sensors.length) {
     sensorsGrid.appendChild(add(card("Echo rate by sensor",
@@ -339,6 +354,14 @@ function renderSession(sess, series, events) {
       sensors.map(s => [sensorName(s.index), Viz.pct(s.echo_rate), Viz.num(s.raw.min, 0), Viz.num(s.raw.p5, 0), Viz.num(s.raw.median, 0),
         Viz.num(s.raw.mean, 0), Viz.num(s.raw.p95, 0), Viz.num(s.raw.max, 0), Viz.num(s.raw.std, 1), s.spikes, s.dropouts, fmtMs(s.longest_dropout_ms)]),
       { wide: true }));
+    if (sensors.some(s => s.has_timing) && sess.src !== "mouse") {
+      sensorsGrid.appendChild(tableCard("Update timing by sensor",
+        "How often each sensor sent a new reading, and how long the game held each value in between.",
+        ["Sensor", "Updates", "Per second", "Gap median", "Gap p90", "Longest gap", "Held value age, median", "Long holds (2 s+)"],
+        sensors.map(s => [sensorName(s.index), s.has_timing ? Viz.num(s.updates, 0) : "—", s.has_timing ? Viz.num(s.update_hz, 1) : "—",
+          fmtMs(dig(s, "interval_ms.median")), fmtMs(dig(s, "interval_ms.p90")), fmtMs(dig(s, "interval_ms.max")),
+          fmtMs(dig(s, "hold_ms.median")), s.long_holds]), { wide: true }));
+    }
   }
   blocks.push(sensorsGrid);
 
@@ -361,7 +384,9 @@ function renderSession(sess, series, events) {
       row("σ, all fixes", sv.sigma), row("σ, two-box", sv.sigma_two_box), row("σ, one-box", sv.sigma_one_box),
       row("Circle gap", sv.gap), row("Pair spread", sv.spread),
       ["Sector miss", Viz.num(dig(sv, "sector_miss.median"), 1) + "°", Viz.num(dig(sv, "sector_miss.p90"), 1) + "°", Viz.num(dig(sv, "sector_miss.max"), 1) + "°", Viz.num(dig(sv, "sector_miss.n"), 0)],
-      row("Raw fix → filtered cursor", sv.raw_vs_filtered_mm)
+      row("Raw fix → filtered cursor", sv.raw_vs_filtered_mm),
+      ["Time between boxes' readings", fmtMs(dig(sv, "age_spread_ms.median")), fmtMs(dig(sv, "age_spread_ms.p90")),
+       fmtMs(dig(sv, "age_spread_ms.max")), Viz.num(dig(sv, "age_spread_ms.n"), 0)]
     ]));
     g.appendChild(tableCard("Solver rates", "Share of non-mouse measurements.", ["Condition", "Share"], [
       ["Two-box exact fix", Viz.pct(sv.mode_share["two-box"])], ["One-box polar fix", Viz.pct(sv.mode_share["one-box"])],
@@ -519,7 +544,7 @@ function copySummary(sess, names) {
   const S = sess.summary || {};
   const lines = [
     `MOLEFIELD session #${sess.id}${sess.label ? " — " + sess.label : ""}`,
-    `${fmtWhen(sess.started_at)} · ${sess.page} · source ${sess.src} · layout ${sess.layout} · duration ${fmtDur(S.duration_s)}`,
+    `${fmtWhen(sess.started_at)} · ${sess.page} · source ${sess.src} · ${dig(S, "config.label") || sess.layout} · duration ${fmtDur(S.duration_s)}`,
     `Measurements: ${S.n_samples} (median ${Viz.num(dig(S, "rates.meas_hz.median"), 1)} Hz)`,
   ];
   if (sess.src !== "mouse" && S.solver) {
@@ -530,7 +555,8 @@ function copySummary(sess, names) {
     lines.push(`Error vs truth: raw fix median ${fmtMM(S.accuracy.raw_fix_mm.median)} (p90 ${fmtMM(S.accuracy.raw_fix_mm.p90)}), filtered median ${fmtMM(S.accuracy.filtered_mm.median)}`);
   }
   for (const s of S.sensors || []) {
-    lines.push(`Sensor ${names[s.index] != null ? names[s.index] : s.index}: echo ${Viz.pct(s.echo_rate)}, range median ${fmtMM(s.raw.median)} (${fmtMM(s.raw.min)}–${fmtMM(s.raw.max)}), spikes ${s.spikes}, dropouts ${s.dropouts}`);
+    lines.push(`Sensor ${names[s.index] != null ? names[s.index] : s.index}: echo ${Viz.pct(s.echo_rate)}, range median ${fmtMM(s.raw.median)} (${fmtMM(s.raw.min)}–${fmtMM(s.raw.max)}), spikes ${s.spikes}, dropouts ${s.dropouts}` +
+      (s.has_timing && sess.src !== "mouse" ? `, ${Viz.num(s.update_hz, 1)} updates/s, longest gap ${fmtMs(dig(s, "interval_ms.max"))}` : ""));
   }
   const g = S.game || {};
   if ((g.hits || 0) + (g.spawns || 0)) {
@@ -568,19 +594,33 @@ async function renderTrends() {
     metric("Veto rate", null, "veto_rate", Viz.pct),
     metric("Anomalies per minute", null, "anomalies_per_min", v => Viz.num(v, 1)),
     metric("Median measurement rate", null, "meas_hz_median", v => Viz.num(v, 1), "Hz"),
+    metric("Median error against ground truth", "Sensor test sessions with a truth marker or simulated body.", "error_median_mm", v => Viz.num(v, 0), "mm"),
     metric("Moles caught", "Game sessions only.", "accuracy", Viz.pct),
     metric("Median reaction time", "Game sessions only.", "reaction_median_ms", v => Viz.num(v, 0), "ms"),
     metric("Best score", "Game sessions only.", "max_score", v => Viz.num(v, 0))
   ];
+  const med = vals => {
+    const v = vals.filter(x => x != null && isFinite(x)).sort((a, b) => a - b);
+    return v.length ? (v.length % 2 ? v[v.length >> 1] : (v[v.length / 2 - 1] + v[v.length / 2]) / 2) : null;
+  };
+  const groups = {};
+  for (const r of rows) (groups[r.config || r.layout] = groups[r.config || r.layout] || []).push(r);
+  const cfgTable = tableCard("Sensor setups compared",
+    "Median of the per-session values in each setup. Older sessions keep the widths they were recorded with, so earlier calibrations stay separate.",
+    ["Setup", "Sessions", "Two-box fix", "σ median", "Error vs truth", "Veto rate", "Anomalies/min", "Time between boxes' readings", "Caught"],
+    Object.entries(groups).map(([k, g]) => [k, g.length,
+      Viz.pct(med(g.filter(r => r.src !== "mouse").map(r => r.two_box_share))), fmtMM(med(g.map(r => r.sigma_median_mm))),
+      fmtMM(med(g.map(r => r.error_median_mm))), Viz.pct(med(g.map(r => r.veto_rate))), Viz.num(med(g.map(r => r.anomalies_per_min)), 1),
+      fmtMs(med(g.map(r => r.age_spread_median_ms))), Viz.pct(med(g.map(r => r.accuracy)))]), { wide: true });
   const table = tableCard("All sessions", null,
-    ["Session", "Started", "Page", "Source", "Layout", "Duration", "Samples", "Two-box", "σ median", "Veto", "Anom./min", "Caught", "Reaction", "Best score"],
-    rows.slice().reverse().map(r => [`#${r.id}${r.label ? " " + r.label : ""}`, fmtWhen(r.started_at), r.page, r.src, r.layout, fmtDur(r.duration_s),
+    ["Session", "Started", "Page", "Source", "Sensors", "Duration", "Samples", "Two-box", "σ median", "Veto", "Anom./min", "Caught", "Reaction", "Best score"],
+    rows.slice().reverse().map(r => [`#${r.id}${r.label ? " " + r.label : ""}`, fmtWhen(r.started_at), r.page, r.src, r.config || r.layout, fmtDur(r.duration_s),
       Viz.num(r.n_samples, 0), Viz.pct(r.two_box_share), fmtMM(r.sigma_median_mm), Viz.pct(r.veto_rate), Viz.num(r.anomalies_per_min, 1),
       Viz.pct(r.accuracy), fmtMs(r.reaction_median_ms), r.max_score == null ? "—" : r.max_score]), { wide: true });
   view.replaceChildren(
     h("p", { class: "cap", style: "color:var(--text-dim);font-size:0.75rem;margin-bottom:0.7rem",
       text: `${rows.length} sessions, oldest first. Filters on the left apply here too. Gaps mean the metric doesn't apply to that session.` }),
-    h("div", { class: "grid2" }, mounts.map(m => m.el), table));
+    h("div", { class: "grid2" }, cfgTable, mounts.map(m => m.el), table));
   mounts.forEach(m => m.mount());
 }
 
@@ -599,7 +639,7 @@ async function init() {
   document.getElementById("tabSession").onclick = () => showView("session");
   document.getElementById("tabTrends").onclick = () => showView("trends");
   const refilter = () => { renderList(); if (L.view === "trends") renderTrends(); };
-  ["fSearch", "fPage", "fSrc", "fShort"].forEach(id => document.getElementById(id).addEventListener("input", refilter));
+  ["fSearch", "fPage", "fSrc", "fCfg", "fShort"].forEach(id => document.getElementById(id).addEventListener("input", refilter));
 
   if (!(await loadList())) return;
   const m = /s=(\d+)/.exec(location.hash);

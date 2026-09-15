@@ -890,8 +890,8 @@ footer .spacer {
 }
 .rec:hover { border-color: var(--text-dim); }
 .recdot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-dim); flex: none; }
-.recdot.rec { background: var(--alarm); animation: recpulse 1.6s ease-in-out infinite; }
-.recdot.offline { background: var(--amber); }
-.recdot.paused { background: transparent; box-shadow: inset 0 0 0 1.5px var(--text-dim); }
+.recdot.is-rec { background: var(--alarm); animation: recpulse 1.6s ease-in-out infinite; }
+.recdot.is-offline { background: var(--amber); }
+.recdot.is-paused { background: transparent; box-shadow: inset 0 0 0 1.5px var(--text-dim); }
 @keyframes recpulse { 50% { opacity: 0.35; } }
-@media (prefers-reduced-motion: reduce) { .recdot.rec { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .recdot.is-rec { animation: none; } }

@@ -13,9 +13,9 @@ from __future__ import annotations
 # ─────────────────────────────────────────────────────────────────────────────
 # Each entry is (x_m, y_m, aim_deg, full_beam_width_deg).
 #
-# !! THE AIM ANGLES AND WIDTHS BELOW ARE UNCALIBRATED DEFAULTS !!
-# 40 deg is a bench estimate of the real cone, and the aims are reconstructed
-# from the intended mounting rather than measured off the built hardware.
+# Widths follow the electrical design (25 deg per sensor with two values per
+# box, 50 deg per box with one). Aims are reconstructed from the intended
+# mounting rather than measured off the built hardware.
 # Run the game's sensortest.html page, capture a calibration sweep, and paste
 # the fitted values back here before trusting the sector solver.
 LAYOUTS: dict[str, list[tuple[float, float, float, float]]] = {
@@ -25,14 +25,18 @@ LAYOUTS: dict[str, list[tuple[float, float, float, float]]] = {
         (0.94, 0.30, 0.0, 40.0),
         (1.31, 0.30, 0.0, 40.0),
     ],
-    # The built rig: box 0 (A,B) bottom-left, box 1 (X,Y) bottom-right.
-    # Sensors are ~40 deg wide but mounted only 25 deg apart, so each box
-    # spans ~65 deg with ~15 deg of overlap -> three sectors per box.
+    # Two boxes upstreaming TWO values each: four 25 deg sensors, the pair in
+    # each box aimed 25 deg apart so they tile the box's 50 deg field.
     "2box4s": [
-        (0.00, 0.30,  26.85, 40.0),   # A  left box, aimed forward
-        (0.00, 0.30,  51.85, 40.0),   # B  left box, aimed along the wall
-        (1.50, 0.30, -51.85, 40.0),   # X  right box, aimed along the wall
-        (1.50, 0.30, -26.85, 40.0),   # Y  right box, aimed forward
+        (0.00, 0.30,  26.85, 25.0),   # A  left box, forward half
+        (0.00, 0.30,  51.85, 25.0),   # B  left box, wall-side half
+        (1.50, 0.30, -51.85, 25.0),   # X  right box, wall-side half
+        (1.50, 0.30, -26.85, 25.0),   # Y  right box, forward half
+    ],
+    # Two boxes upstreaming ONE normalised value each: one 50 deg sensor per box.
+    "2box2s": [
+        (0.00, 0.30,  39.35, 50.0),   # L  left box
+        (1.50, 0.30, -39.35, 50.0),   # R  right box
     ],
     "2box": [
         (0.10, 0.30, 14.0, 40.0),
@@ -50,6 +54,7 @@ LAYOUTS: dict[str, list[tuple[float, float, float, float]]] = {
 LAYOUT_NAMES: dict[str, list[str]] = {
     "4lin": ["0", "1", "2", "3"],
     "2box4s": ["A", "B", "X", "Y"],
+    "2box2s": ["L", "R"],
     "2box": ["L", "R"],
     "4wide": ["0", "1", "2", "3"],
 }
@@ -66,8 +71,12 @@ BEAM_MAX_RANGE: float = 2.40   # Hard ceiling from ECHO_TIMEOUT_US in firmware
 BEAM_MIN_RANGE: float = 0.04
 
 # Solver / filter tuning. Must mirror SOLVER in game/js/config.js.
+# Which layout a given number of values per box means (see hub.py).
+VALUES_PER_BOX_LAYOUT: dict[int, str] = {1: "2box2s", 2: "2box4s"}
+
 SOLVER: dict[str, float] = {
-    "median_window": 5,      # Samples of median filtering on each raw range
+    "median_window": 5,      # At most this many readings of one sensor are medianed
+    "median_max_age_ms": 500,  # ...and only readings this recent (then: last value)
     "sector_tol_deg": 6.0,   # Slack before a fix is vetoed for leaving its cone
     "max_gap": 0.35,         # m - circle separation above this is not a real fix
     "pair_spread_warn": 0.25,
@@ -81,7 +90,9 @@ DEFAULTS: dict[str, int | float] = {
     "sync": 4211,
     "rate": 30.0,         # Frames per second pushed to the game UI over WS
     "sync_hz": 15.6,      # Ping slot beacon cycles per second across all boxes
-    "stale_ms": 400,      # Invalidation threshold for lost sensor echoes (ms)
+    "stale_ms": 0,        # 0 = hold each sensor's last value indefinitely (boxes
+                          # upstream at their own discretion); >0 expires values
+    "alive_s": 10.0,      # A box silent this long is shown as offline
 }
 
 # RFC 6455 WebSocket Handshake Magic GUID

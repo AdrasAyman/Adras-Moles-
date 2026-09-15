@@ -6,12 +6,58 @@ slot synchronization beacon broadcasting, and dry-run simulation loops.
 from __future__ import annotations
 
 import json
+import random
 import socket
 import threading
 import time
 from typing import Callable
 from bridge.hub import SensorHub
 from bridge.simulator import Walker
+
+
+def parse_datagram(text: str) -> tuple[int, list, bool | None] | None:
+    """
+    Decode one sensor packet into (box, readings_mm, one_based).
+
+    JSON (box id 0 = left, 1 = right, readings in millimetres, null = no echo):
+        {"box": 0, "ranges": [1420, 1655]}     two values: two 25 deg sensors
+        {"box": 0, "ranges": [1420]}           one value: one 50 deg sensor
+        {"box": 0, "range": 1420}              also accepted ("mm" / "value" too)
+    Plain text (box id 1-based, readings in centimetres, -1 = no echo):
+        Box:1,S1:142.0,S2:165.5                Box:1,S1:142.0
+    Returns None when the packet is not recognisable.
+    """
+    text = text.strip()
+    if text.startswith("{"):
+        try:
+            msg = json.loads(text)
+        except ValueError:
+            return None
+        if not isinstance(msg, dict) or "box" not in msg:
+            return None
+        try:
+            box = int(msg["box"])
+        except (TypeError, ValueError):
+            return None
+        if isinstance(msg.get("ranges"), list):
+            return box, list(msg["ranges"]), None
+        for key in ("range", "mm", "value"):
+            if key in msg:
+                return box, [msg[key]], None
+        return None
+    if text.startswith("Box:"):
+        try:
+            parts = text.split(",")
+            box = int(parts[0].split(":", 1)[1])
+            vals = []
+            for p in parts[1:]:
+                if ":" in p:
+                    cm = float(p.split(":", 1)[1])
+                    vals.append(round(cm * 10.0) if cm > 0 else None)
+            return box, vals, True
+        except (ValueError, IndexError):
+            return None
+    return None
 
 
 def udp_listener(
@@ -21,8 +67,8 @@ def udp_listener(
     log: Callable[[str], None] = print,
 ):
     """
-    Listens for incoming UDP datagrams containing ultrasonic ranges from ESP32 boxes.
-    Expected datagram format: {"box": 0, "t": 184213, "ranges": [1420, 1655]}
+    Listens for sensor packets from the ESP32 boxes (see parse_datagram).
+    Boxes may send at any rate; the hub holds each sensor's last value.
     """
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -38,36 +84,12 @@ def udp_listener(
         except OSError:
             break
 
-        text = data.decode("utf-8", "replace").strip()
-        try:
-            msg = json.loads(text)
-            hub.ingest(
-                box=int(msg.get("box", 0)),
-                ranges_mm=list(msg.get("ranges", [])),
-                sender=addr[0],
-            )
-        except (ValueError, TypeError):
-            # Fallback parser for string payloads like "Box:1,S1:105.2,S2:98.4"
-            if text.startswith("Box:"):
-                try:
-                    parts = text.split(",")
-                    box_id = int(parts[0].split(":")[1])
-                    # If 1-indexed (Box:1, Box:2), map to 0-indexed (0, 1)
-                    if box_id in (1, 2) and 0 not in hub.map and 1 in hub.map:
-                        norm_box = box_id - 1
-                    else:
-                        norm_box = box_id
-                    
-                    ranges = []
-                    for p in parts[1:]:
-                        if ":" in p:
-                            val_cm = float(p.split(":")[1])
-                            ranges.append(round(val_cm * 10.0) if val_cm > 0 else None)
-                    hub.ingest(box=norm_box, ranges_mm=ranges, sender=addr[0])
-                except Exception:
-                    hub.bad += 1
-            else:
-                hub.bad += 1
+        parsed = parse_datagram(data.decode("utf-8", "replace"))
+        if parsed is None:
+            hub.bad += 1
+            continue
+        box, vals, one_based = parsed
+        hub.ingest(box=box, ranges_mm=vals, sender=addr[0], one_based=one_based)
 
     sock.close()
 
@@ -100,24 +122,40 @@ def sync_beacon(port: int, hz: float, stop: threading.Event):
 def simulator_thread(
     hub: SensorHub,
     walker: Walker,
-    box_map: dict[int, list[int]],
+    values_per_box: int,
     hz: float,
+    timing: str,
     stop: threading.Event,
 ):
     """
-    Generates synthetic sensor frames and pushes them into the SensorHub
-    for offline dry-run testing without physical hardware.
+    Synthetic sensor boxes for dry runs without hardware.
+
+    values_per_box  1 -> each box sends one 50 deg reading; 2 -> two 25 deg readings
+    timing          "regular"   both boxes send every 1/hz seconds
+                    "irregular" box 0 sends about every 100 ms with jitter, box 1 at
+                                random intervals (mean ~700 ms, 50 ms - 3 s), which
+                                exercises the hold-last-value path end to end
     """
+    rng = random.Random()
     period = 1.0 / hz
-    nxt = time.monotonic()
+    t_prev = time.monotonic()
+    due = [t_prev, t_prev]
+
+    def next_gap(box: int) -> float:
+        if timing != "irregular":
+            return period
+        if box == 0:
+            return max(0.02, rng.gauss(0.10, 0.03))
+        return min(3.0, max(0.05, rng.expovariate(1.0 / 0.7)))
 
     while not stop.is_set():
-        x, y = walker.truth(period)
-        all_ranges = walker.ranges_mm(x, y)
-
-        for box, idxs in box_map.items():
-            box_ranges = [all_ranges[i] for i in idxs if i < len(all_ranges)]
-            hub.ingest(box=box, ranges_mm=box_ranges, sender="simulated")
-
-        nxt += period
-        time.sleep(max(0.0, nxt - time.monotonic()))
+        now = time.monotonic()
+        x, y = walker.truth(now - t_prev)
+        t_prev = now
+        for box in range(2):
+            if now >= due[box]:
+                allmm = walker.ranges_mm(x, y)
+                vals = allmm[box * values_per_box: (box + 1) * values_per_box]
+                hub.ingest(box=box, ranges_mm=vals, sender="simulated")
+                due[box] = now + next_gap(box)
+        time.sleep(max(0.002, min(due) - time.monotonic()))

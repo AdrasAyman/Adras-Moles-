@@ -23,8 +23,8 @@ import time
 import webbrowser
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
-from bridge.cli import DIVIDER_BAR, build_arg_parser, parse_map, status_loop
-from bridge.config import LAYOUTS
+from bridge.cli import DIVIDER_BAR, build_arg_parser, status_loop
+from bridge.config import DEFAULTS, LAYOUTS, VALUES_PER_BOX_LAYOUT
 from bridge.hub import SensorHub
 from bridge.networking import simulator_thread, sync_beacon, udp_listener
 from bridge.pipeline import pump
@@ -38,16 +38,18 @@ def main():
     parser = build_arg_parser()
     args = parser.parse_args()
 
-    sensors = LAYOUTS[args.layout]
-    box_map = parse_map(args.map, len(sensors))
     stop_event = threading.Event()
+    start_values = args.sim_values if args.simulate else args.values
+    start_layout = VALUES_PER_BOX_LAYOUT[start_values]
 
     print(DIVIDER_BAR)
     print("  MOLEFIELD  -  Full-Body Whack-a-Mole")
     print(DIVIDER_BAR)
     print(
-        f"  layout {args.layout}: {len(sensors)} sensors, "
-        f"{len(box_map)} boxes  {box_map}"
+        f"  sensors: auto-detect 1 or 2 values per box "
+        f"(assuming {start_values} until packets arrive); "
+        + ("values held until each box sends again" if args.stale_ms == 0
+           else f"values expire after {args.stale_ms} ms")
     )
 
     # Resolve game asset root (handles source tree and PyInstaller --onefile bundle)
@@ -106,9 +108,10 @@ def main():
         csv_file = open(args.log, "w", newline="", encoding="utf-8")
         csv_writer = csv.writer(csv_file)
         csv_writer.writerow(
-            ["t_s"]
-            + [f"raw{i}_mm" for i in range(len(sensors))]
-            + [f"med{i}_mm" for i in range(len(sensors))]
+            ["t_s", "layout"]
+            + [f"raw{i}_mm" for i in range(4)]
+            + [f"med{i}_mm" for i in range(4)]
+            + [f"age{i}_ms" for i in range(4)]
             + [
                 "x_m", "y_m", "mode", "sigma_mm", "gap_mm", "spread_mm",
                 "sector_miss_deg", "residual_mm", "veto", "n_sensors", "reason",
@@ -117,21 +120,22 @@ def main():
         print(f"  Logging telemetry frames to {args.log}")
 
     # ── Sensor Hub & Workers ─────────────────────────────────────────────────
-    hub = SensorHub(len(sensors), box_map, args.stale_ms)
+    hub = SensorHub(args.stale_ms, DEFAULTS["alive_s"], start_values)
 
     if args.simulate:
         walker = Walker(
-            sensors=sensors,
+            sensors=LAYOUTS[start_layout],
             noise=args.noise / 1000.0,
             drop=args.dropout / 100.0,
         )
         threading.Thread(
             target=simulator_thread,
-            args=(hub, walker, box_map, args.sync_hz, stop_event),
+            args=(hub, walker, args.sim_values, args.sync_hz, args.sim_timing, stop_event),
             daemon=True,
             name="sim",
         ).start()
-        print("  SIMULATE: No hardware required. Synthetic body active.")
+        print(f"  SIMULATE: synthetic body, {args.sim_values} value(s) per box, "
+              f"{args.sim_timing} timing.")
     else:
         threading.Thread(
             target=udp_listener,
@@ -155,7 +159,6 @@ def main():
         args=(
             hub,
             ws_server,
-            sensors,
             args.rate,
             csv_writer,
             stop_event,
@@ -172,11 +175,11 @@ def main():
 
     game_url = (
         f"http://localhost:{args.http}/index.html"
-        f"?src={'sim' if args.simulate else 'live'}&ws={args.ws}&layout={args.layout}"
+        f"?src={'sim' if args.simulate else 'live'}&ws={args.ws}&layout={start_layout}"
     )
     test_url = (
         f"http://localhost:{args.http}/sensortest.html"
-        f"?src={'sim' if args.simulate else 'live'}&ws={args.ws}&layout={args.layout}"
+        f"?src={'sim' if args.simulate else 'live'}&ws={args.ws}&layout={start_layout}"
     )
     print(DIVIDER_BAR)
     print(f"  GAME CLIENT: {game_url}")
@@ -190,7 +193,7 @@ def main():
     # ── Terminal Live Status Monitor ─────────────────────────────────────────
     threading.Thread(
         target=status_loop,
-        args=(hub, ws_server, sensors, stop_event),
+        args=(hub, ws_server, stop_event),
         daemon=True,
         name="status",
     ).start()

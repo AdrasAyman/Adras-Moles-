@@ -27,9 +27,9 @@ const AREA = {
    Bearing convention throughout the codebase is atan2(dx, dy):
    0deg points straight out from the wall, POSITIVE turns toward +x.
 
-   !! THESE ARE UNCALIBRATED DEFAULTS !!
-   The 40deg width is a bench estimate, not a measurement, and the
-   aim angles are reconstructed from the intended mounting rather
+   Widths follow the electrical design: 25° per sensor when a box
+   upstreams two values, 50° per box when it upstreams one normalised
+   value. Aims are reconstructed from the intended mounting rather
    than measured off the built hardware. Run sensortest.html,
    capture a calibration sweep, and paste the fitted values back
    in here before trusting any of the sector logic.
@@ -42,8 +42,12 @@ const BEAM = {
 
 /* ── Solver / filter tuning ───────────────────────────────────── */
 const SOLVER = {
-  medianWindow: 5,      // Samples of median filtering on each raw range
-  measureHz: 15.6,      // True sensor ping rate; sim generates at this rate
+  medianWindow: 5,      // At most this many readings of one sensor are medianed
+  medianMaxAgeMs: 500,  // ...and only readings this recent. A sensor that has
+                        // gone quiet contributes just its last value, so a slow
+                        // or irregular upstream is never outvoted by old copies.
+  holdMismatchMs: 750,  // Two boxes' values this far apart in time get flagged
+  measureHz: 15.6,      // Regular sim rate (the old slotted ping rate)
   maxSpeed: 4.0,        // m/s — measurements implying more are rejected
   gateTimeoutMs: 500,   // ...but after this long we re-acquire anyway
   sectorTolDeg: 6.0,    // Slack before a fix is vetoed for leaving its cone
@@ -63,13 +67,21 @@ const LAYOUTS = {
     ]
   },
   "2box4s": {
-    name: "2 CORNER BOXES (4 SENSORS)",
-    hint: "The built rig. Box 1 (A,B) bottom-left, Box 2 (X,Y) bottom-right. Each sensor is ~40 deg wide but the pair is mounted only 25 deg apart, so each box covers ~65 deg with ~15 deg of overlap in the middle. That overlap is what gives the boolean sector solver three sectors per box instead of two.",
+    name: "2 BOXES · 4 SENSORS (25°)",
+    hint: "Four values upstreamed: Box 1 sends A and B, Box 2 sends X and Y. Each sensor covers 25°, and the two in a box are aimed 25° apart so together they tile the box's 50° field. Which of the pair fired tells the sector solver which half of the box's field the player is in.",
     s: [
-      { n: "A", x: 0.00, y: 0.30, a:  26.85, w: 40, box: 1, slot: 1 },  // left box, aimed forward
-      { n: "B", x: 0.00, y: 0.30, a:  51.85, w: 40, box: 1, slot: 2 },  // left box, aimed along the wall
-      { n: "X", x: 1.50, y: 0.30, a: -51.85, w: 40, box: 2, slot: 1 },  // right box, aimed along the wall
-      { n: "Y", x: 1.50, y: 0.30, a: -26.85, w: 40, box: 2, slot: 2 }   // right box, aimed forward
+      { n: "A", x: 0.00, y: 0.30, a:  26.85, w: 25, box: 1, slot: 1 },  // left box, forward half   14.35°–39.35°
+      { n: "B", x: 0.00, y: 0.30, a:  51.85, w: 25, box: 1, slot: 2 },  // left box, wall-side half 39.35°–64.35°
+      { n: "X", x: 1.50, y: 0.30, a: -51.85, w: 25, box: 2, slot: 1 },  // right box, wall-side half
+      { n: "Y", x: 1.50, y: 0.30, a: -26.85, w: 25, box: 2, slot: 2 }   // right box, forward half
+    ]
+  },
+  "2box2s": {
+    name: "2 BOXES · 2 SENSORS (50°)",
+    hint: "Two values upstreamed: each box normalises its pair of transducers into one reading covering 50°. Same field of view as the four-sensor setup, but each box only knows the player is somewhere in its 50° cone.",
+    s: [
+      { n: "L", x: 0.00, y: 0.30, a:  39.35, w: 50, box: 1, slot: 1 },  // left box  14.35°–64.35°
+      { n: "R", x: 1.50, y: 0.30, a: -39.35, w: 50, box: 2, slot: 1 }   // right box
     ]
   },
   "4wide": {
@@ -86,10 +98,24 @@ const LAYOUTS = {
 
 LAYOUTS["2box"] = LAYOUTS["2box4s"];
 
-const BOXES = [
-  { id: 1, label: "BOX 1", side: "LEFT",  idx: [0, 1] },
-  { id: 2, label: "BOX 2", side: "RIGHT", idx: [2, 3] }
-];
+/* ── Upstream formats ──────────────────────────────────────────
+   Each box upstreams either ONE value (normalised on the box, one 50°
+   sensor) or TWO values (two 25° sensors). The bridge detects which and
+   tags every frame with the matching layout; these are the two layouts
+   it can report. */
+const VALUES_PER_BOX_LAYOUT = { 1: "2box2s", 2: "2box4s" };
+
+/** Box groupings for a layout, derived from each sensor's `box` field. */
+function boxesFor(layoutKey) {
+  const sensors = LAYOUTS[layoutKey].s;
+  const ids = [...new Set(sensors.map(s => s.box))].sort((a, b) => a - b);
+  return ids.map((id, k) => ({
+    id: id,
+    label: "BOX " + id,
+    side: ids.length === 2 ? (k === 0 ? "LEFT" : "RIGHT") : "",
+    idx: sensors.map((s, i) => (s.box === id ? i : -1)).filter(i => i >= 0)
+  }));
+}
 
 const LEVELS = [
   {
@@ -167,6 +193,6 @@ const LEVELS = [
 
 const SRC_HINT = {
   mouse: "The mouse is the body. Sensors are simulated for the top view only — the game reads the pointer directly, so tracking is perfect. Use this to tune the game itself.",
-  sim: "The mouse is the true body position. The game only sees four noisy ultrasonic ranges and solves for you. This is the real pipeline, and the cyan dot is the unfiltered fix.",
+  sim: "The mouse is the true body position. The game only sees noisy ultrasonic ranges — two or four, depending on the layout — and solves for you. This is the real pipeline, and the cyan dot is the unfiltered fix.",
   live: "Ranges come from your ESP32 boxes over a WebSocket. Same solver, same filter, real hardware."
 };

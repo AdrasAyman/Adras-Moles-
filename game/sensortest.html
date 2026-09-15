@@ -91,10 +91,11 @@
           <div class="field" style="margin-top:0.5rem">
             <label>Layout</label>
             <div class="seg" role="group">
-              <button data-lay="2box4s" aria-pressed="true">2 CORNER</button>
+              <button data-lay="2box4s" aria-pressed="true">4 SENSORS · 25°</button>
+              <button data-lay="2box2s" aria-pressed="false">2 SENSORS · 50°</button>
               <button data-lay="4wide" aria-pressed="false">4 SPLAYED</button>
-              <button data-lay="4lin" aria-pressed="false">4 IN LINE</button>
             </div>
+            <p class="hint" id="stLayHint" style="margin-top:0.4rem"></p>
           </div>
         </div>
 
@@ -103,15 +104,16 @@
           <table class="sens" id="sensTable">
             <thead>
               <tr>
-                <th>Sensor</th><th>Raw</th><th>Median</th><th>Echo</th>
-                <th>Min</th><th>Max</th><th>Bearing</th>
+                <th>Sensor</th><th>Raw</th><th>Median</th><th>Age</th>
+                <th>Upd/s</th><th>Max</th><th>Bearing</th>
               </tr>
             </thead>
             <tbody id="sensBody"></tbody>
           </table>
           <p class="hint" style="margin-top:0.4rem">
-            <b>Max</b> is the furthest echo this sensor has ever returned — that is your
-            measured range ceiling. <b>Echo</b> is the fill rate of the median window.
+            <b>Raw</b> is each sensor's last reading, held until it sends again; <b>Age</b>
+            is how long ago that was and <b>Upd/s</b> how often it is sending. <b>Max</b> is
+            the furthest echo this sensor has ever returned — your measured range ceiling.
           </p>
         </div>
 
@@ -134,9 +136,9 @@
           <h2>Boolean sectors</h2>
           <div id="sectorList"></div>
           <p class="hint" style="margin-top:0.4rem">
-            Which sensors fired, and the bearing wedge that implies. A box whose two
-            sensors both fire gives the narrow overlap sector — the most precise
-            bearing available without a second box.
+            Which sensors fired, and the bearing wedge that implies. With two 25°
+            sensors per box, which one fired narrows the box's 50° field to half;
+            with one 50° sensor per box, the wedge is the whole cone.
           </p>
         </div>
 
@@ -195,16 +197,24 @@
             <input type="range" id="sDrop" min="0" max="40" value="3">
           </div>
           <div class="field">
-            <label>Sim beam width <b id="vBeam">40°</b></label>
-            <input type="range" id="sBeam" min="15" max="80" value="40">
+            <label>Upstream timing</label>
+            <select id="sTiming" style="width:100%;background:var(--ink);border:1px solid var(--line);color:var(--text);font:500 0.68rem var(--body);padding:0.3rem;border-radius:2px">
+              <option value="regular">Regular — every box at 15.6 Hz</option>
+              <option value="irregular">Irregular — box 1 ≈10 Hz, box 2 at random</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Sim beam width <b id="vBeam">as configured</b></label>
+            <input type="range" id="sBeam" min="0" max="80" value="0">
           </div>
           <div class="field">
             <label>Smoothing α <b id="vAlpha">0.35</b></label>
             <input type="range" id="sAlpha" min="5" max="100" value="35">
           </div>
           <p class="hint">
-            Set the sim beam away from 40° to sense with one width while the solver
-            still assumes the calibrated one. That is the mis-calibration test.
+            Leave the beam at "as configured" to sense with each sensor's own width
+            (25° or 50°). Drag it to sense with a different width while the solver still
+            assumes the configured one — the mis-calibration test.
           </p>
         </div>
 

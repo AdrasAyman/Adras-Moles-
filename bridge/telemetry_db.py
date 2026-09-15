@@ -24,7 +24,7 @@ import threading
 import time
 from typing import Any, Iterable
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2   # 2: per-sensor value ages (a0-a3), for boxes that upstream at their own pace
 MAX_SENSORS = 4  # every layout in config.py/config.js has at most four
 
 # Column order for samples. Shared by insert, CSV export and analysis.
@@ -37,8 +37,10 @@ SAMPLE_COLS: list[str] = (
        "sigma", "gap", "spread", "miss", "resid",  # mm, mm, mm, deg, mm
        "veto", "split", "conflict", "stale", "alarm",
        "gate", "meas_hz", "fps", "score", "level", "boxes_alive"]
+    + [f"a{i}" for i in range(MAX_SENSORS)]      # ms since that sensor last sent (v2)
 )
 _INT_COLS = {f"r{i}" for i in range(MAX_SENSORS)} | {f"m{i}" for i in range(MAX_SENSORS)} | {
+    f"a{i}" for i in range(MAX_SENSORS)} | {
     "t", "veto", "split", "conflict", "stale", "alarm", "gate", "score", "level", "boxes_alive"}
 _TEXT_COLS = {"src", "mode", "phase"}
 
@@ -115,7 +117,17 @@ class TelemetryStore:
             self._db.execute("PRAGMA synchronous=NORMAL")
             self._db.execute("PRAGMA foreign_keys=ON")
             self._db.executescript(_SCHEMA)
+            self._migrate()
             self._db.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
+
+    def _migrate(self) -> None:
+        """Bring an older database up to date in place. Existing rows are kept;
+        columns added later are simply NULL for sessions recorded before them."""
+        have = {r[1] for r in self._db.execute("PRAGMA table_info(samples)")}
+        for c in SAMPLE_COLS:
+            if c not in have:
+                kind = "INTEGER" if c in _INT_COLS else "TEXT" if c in _TEXT_COLS else "REAL"
+                self._db.execute(f"ALTER TABLE samples ADD COLUMN {c} {kind}")
 
     def close(self) -> None:
         with self._lock:

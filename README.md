@@ -69,6 +69,11 @@ Test the entire pipeline with a synthetic walking body:
 ```bash
 python molefield.py --simulate
 ```
+Simulate the newer upstream styles too:
+```bash
+python molefield.py --simulate --sim-values 1                       # one 50° reading per box
+python molefield.py --simulate --sim-values 2 --sim-timing irregular # box 1 ~10 Hz, box 2 at random
+```
 
 ### 2. Live Hardware Mode (Standalone ESP32 Access Point)
 * **ESP32 Box 0** automatically broadcasts its own Wi-Fi network: **`Molefield`** (Password: **`molefield123`**).
@@ -114,17 +119,22 @@ EMA that used to live there cost ~180 ms of lag, about 70% of the whole latency
 budget.
 
 ### 2. Boolean sectors
-The two sensors in a box are ~40° wide but mounted only 25° apart, so they overlap
-by ~15°. That splits each box into **three** angular sectors rather than two:
+Which sensors in a box fired, and which stayed silent, constrains the bearing to an
+angular sector. How much that tells you depends on what the box upstreams:
 
 ```
-   A only  :  6.9° … 31.9°   (25° wide)
-   A AND B : 31.9° … 46.9°   (15° wide)  <- tightest, most informative
-   B only  : 46.9° … 71.9°   (25° wide)
+   Two values per box (4 × 25°), left box:
+   A only : 14.4° … 39.4°   (25° wide)
+   B only : 39.4° … 64.4°   (25° wide)
+
+   One value per box (2 × 50°), left box:
+   L      : 14.4° … 64.4°   (50° wide)
 ```
 
-Three left sectors × three right sectors = **nine boolean regions**. Fired sensors
-intersect their cones; silent sensors carve theirs out.
+Both setups cover the same 50° per box, so a two-box fix is equally accurate either
+way. The narrower sectors only matter when one box is blind, where they tighten the
+one-box fallback. Cones that overlap would add a third, narrow sector per box.
+Fired sensors intersect their cones; silent sensors carve theirs out.
 
 ### 3. Closed-form intersection
 Two circles are solved directly rather than by grid search plus gradient descent:
@@ -213,7 +223,7 @@ mode, dropping to 1 Hz when nobody is using the page):
 
 | Group | Columns |
 |---|---|
-| Sensors | `r0`–`r3` raw range (mm), `m0`–`m3` median-filtered range (mm) |
+| Sensors | `r0`–`r3` raw (latest held) range (mm), `m0`–`m3` median-filtered range (mm), `a0`–`a3` age of each sensor's value (ms) |
 | Solver | `mode`, `sigma` (mm), `gap` (mm), `spread` (mm), `miss` (deg), `resid` (mm), `veto`, `split`, `conflict`, `gate` |
 | Position | `x_raw`/`y_raw` solver fix, `x`/`y` filtered cursor, `tx`/`ty` ground truth (m) |
 | System | `src`, `stale`, `meas_hz`, `fps`, `boxes_alive` |
@@ -242,8 +252,11 @@ simulated mode. That is what makes the "error against ground truth" numbers poss
 | Sector conflict | The set of firing sensors is impossible under the cone calibration |
 | Position jump | The raw fix moves more than 0.6 m between measurements |
 | Velocity gate | The tracker rejects movement faster than 4 m/s |
-| Stale data | Live frames stop for more than 400 ms |
-| Low measurement rate | Under 10 measurements/s for over 2 s |
+| Long hold | A sensor goes 2 s or more without sending a new reading |
+| Held-value mismatch | One solve combines readings taken 750 ms or more apart |
+| Mixed value counts | One box sends one value while the other sends two |
+| Stale data *(older sessions)* | Live frames stopped for more than 400 ms |
+| Low measurement rate *(older sessions)* | Under 10 measurements/s for over 2 s |
 | Low render rate | Under 30 fps for over 2 s |
 | Box offline | The bridge stops hearing from a sensor box |
 | Bad packets | The bridge receives datagrams it can't parse |
@@ -265,23 +278,43 @@ fields are saved with the session.
 ## Network Protocol
 
 ### Inbound Range Datagrams (UDP Port 5000)
-The bridge listens on `UDP :5000` — the port used by the deployed ESP32 test
-firmware (`esp_test_files/ESP_code/Box1`, `Box2`) — and accepts either wire
-format it receives, auto-detected per datagram:
+Each sensor box sends a datagram **whenever it has a reading**. There is no required
+rate, and the two boxes don't need to match: one can send ten times a second while
+the other sends at random.
 
-**Plain-text (current hardware, `esp_test_files/ESP_code`):**
-```
-Box:1,S1:120.5,S2:115.2
-```
-Box IDs are 1-indexed on the hardware; `Sn` values are centimetres to the
-nearest surface, `-1` means no echo. The bridge normalises box IDs to
-0-indexed and converts centimetres to millimetres internally.
+**One value or two.** A box sends either:
+- **one** value, a reading already normalised on the box, treated as **one 50°
+  sensor** per box (layout `2box2s`, sensors `L` and `R`), or
+- **two** values, treated as **two 25° sensors** per box (layout `2box4s`, sensors
+  `A`, `B` and `X`, `Y`).
 
-**JSON (`firmware/molefield_sensor.ino`, not yet flashed):**
+The bridge detects which from the packets themselves, and the game and sensor test
+page switch to match. It takes three consecutive packets with the new count from
+every active box to switch, so one malformed packet can't flip the layout. If the two
+boxes disagree, the current layout is kept and the logs flag "mixed value counts".
+
+**Hold last value.** Each sensor's most recent reading is kept until that sensor
+sends a new one, so the game always computes with the last value it received. Values
+never expire unless you start the bridge with `--stale-ms N`. Each frame to the game
+carries a per-sensor update counter and value age, so a held value is never mistaken
+for a new reading. See the `Tracker` notes in `game/js/tracker.js`.
+
+**JSON** (box `0` = left, `1` = right; readings in millimetres; `null` or `<= 0` = no echo):
 ```json
-{"box": 0, "t": 184213, "ranges": [1420, 1655], "batt": 5210}
+{"box": 0, "ranges": [1420, 1655]}
+{"box": 0, "ranges": [1420]}
+{"box": 0, "range": 1420}
 ```
-* `ranges`: Distances in millimetres to the nearest reflective surface (`null` if no echo was detected).
+Extra fields such as `"t"` or `"batt"` are ignored.
+
+**Plain text** (box `1` = left, `2` = right; readings in centimetres; `-1` = no echo):
+```
+Box:1,S1:142.0,S2:165.5
+Box:1,S1:142.0
+```
+
+The bridge still broadcasts the slot sync beacon on `UDP :4211` (below). Firmware may
+use it to avoid cross-talk between boxes, but doesn't have to.
 
 ### Setup Wizard
 The game's `LIVE` position source opens an in-page setup wizard: enter the

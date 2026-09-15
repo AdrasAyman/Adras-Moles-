@@ -268,9 +268,13 @@ const Viz = (() => {
         for (let i = 0; i < n; i += every) text(c, opts.categoricalX[i], X(xs[i]), top + ph + 18, t.muted, { align: "center" });
       } else {
         const xt = niceTicks(0, x1 - x0, Math.max(2, Math.floor(pw / 90)));
+        let prevLab = null;
         for (const tk of xt) {
           if (tk > x1 - x0) continue;
-          text(c, (opts.xFormat || clock)(tk), X(x0 + tk), top + ph + 18, t.muted, { align: "center" });
+          const lab = (opts.xFormat || clock)(tk);
+          if (lab === prevLab) continue;          // very short spans round to the same second
+          prevLab = lab;
+          text(c, lab, X(x0 + tk), top + ph + 18, t.muted, { align: "center" });
         }
       }
       if (opts.yUnit) text(c, opts.yUnit, left - 8, top - 12, t.muted, { align: "right", size: 10 });
@@ -437,9 +441,11 @@ const Viz = (() => {
       }
       c.globalAlpha = 1;
       const xt = niceTicks(0, x1 - x0, Math.max(2, Math.floor(pw / 90)));
+      let prevLab = null;
       for (const tk of xt) {
-        if (tk > x1 - x0) continue;
-        text(c, clock(tk), left + (x1 === x0 ? 0 : (tk / (x1 - x0)) * pw), top + ph + 18, t.muted, { align: "center" });
+        if (tk > x1 - x0 || clock(tk) === prevLab) continue;
+        prevLab = clock(tk);
+        text(c, prevLab, left + (x1 === x0 ? 0 : (tk / (x1 - x0)) * pw), top + ph + 18, t.muted, { align: "center" });
       }
       if (state.hover != null) {
         const xx = Math.round(left + (state.hover + 0.5) * bw) + 0.5;
@@ -710,7 +716,12 @@ const Viz = (() => {
         text(c, String(r.events.length), left + pw + 8, cy + 4, t.text, { weight: 600 });
       });
       const xt = niceTicks(0, span, Math.max(2, Math.floor(pw / 90)));
-      for (const tk of xt) if (tk <= span) text(c, clock(tk), X(opts.t0 + tk), h - 8, t.muted, { align: "center" });
+      let prevLab = null;
+      for (const tk of xt) {
+        if (tk > span || clock(tk) === prevLab) continue;
+        prevLab = clock(tk);
+        text(c, prevLab, X(opts.t0 + tk), h - 8, t.muted, { align: "center" });
+      }
       layout = { left: left, pw: pw, top: top, X: X };
     };
     const hit = (mx, my) => {

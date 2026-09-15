@@ -27,7 +27,7 @@ import time
 from http.server import BaseHTTPRequestHandler
 from urllib.parse import parse_qs, urlparse
 
-from bridge.analysis import series, summarize, trend_row
+from bridge.analysis import SUMMARY_VERSION, series, summarize, trend_row
 from bridge.telemetry_db import TelemetryStore
 
 MAX_BODY = 4 * 1024 * 1024
@@ -89,7 +89,7 @@ class TelemetryAPI:
     def summary_for(self, sess: dict) -> dict | None:
         fresh = (sess.get("summary") is not None and sess.get("ended_at") is not None
                  and (sess.get("summary_at") or 0) >= (sess.get("last_seen") or 0)
-                 and (sess["summary"] or {}).get("version") is not None)
+                 and (sess["summary"] or {}).get("version") == SUMMARY_VERSION)
         if fresh:
             return sess["summary"]
         with self._summary_lock:
