@@ -76,6 +76,9 @@ python molefield.py --simulate --sim-values 2 --sim-timing irregular # box 1 ~10
 ```
 
 ### 2. Live Hardware Mode (Standalone ESP32 Access Point)
+The dead-zone line ("out of bounds") is adjustable with the slider in the game sidebar
+and remembered in the browser.
+
 * **ESP32 Box 0** automatically broadcasts its own Wi-Fi network: **`Molefield`** (Password: **`molefield123`**).
 * **ESP32 Box 1** connects automatically to Box 0.
 * Connect your Laptop / PC Wi-Fi to **`Molefield`**, then run:
@@ -170,11 +173,10 @@ one. Measured on the built layout this lifts the "cursor alive" rate from ~88% t
 Players walk, so anything implying faster movement is treated as a glitch. Three layers
 work together, and every setting lives in `SOLVER` in `game/js/config.js`:
 
-1. **Background rule** (`maxPlayerRangeM` 2.3 m). A reading beyond the play area is
-   the room behind the player: that sensor doesn't see anyone, so its reading is
-   treated as "no echo" and never reaches the solver. Without this, a sensor looking
-   past the player draws a 3.5 m circle and the position lands metres outside the
-   field. This is the single biggest accuracy fix for real hardware.
+1. **Out-of-range rule** (`maxPlayerRangeM` 2.3 m). A reading beyond the play area
+   (the firmware's 8 m for "nothing found") never reaches the solver; the sensor keeps
+   its last real value. Without this, an 8 m reading draws an 8 m circle and the
+   position lands metres outside the field.
 1b. **Range gate** (`maxRangeRate`, off by default). Optionally ignores a reading that
    is further from that sensor's last accepted reading than a walker could move in the
    time since. Measured against the two layers above it changed nothing (10 vs 12 mm
@@ -324,13 +326,12 @@ one — no fixed rate, and the boxes don't need to agree with each other:
 in **centimetres** (`--units mm` if the firmware sends millimetres). `-1` or `0` means
 no echo. Each sensor's last value is kept until that sensor sends again.
 
-**A far reading means "I don't see the player".** An ultrasonic sensor whose cone
-misses the player doesn't return nothing — it returns the wall or furniture behind
-them. The far corner of the play area is 2.07 m from a box, so any reading over
-**2.3 m** (`SOLVER.maxPlayerRangeM`, `MAX_PLAYER_RANGE`) is treated as "no player in
-this cone", is shown as *room* in the panels, and never reaches the solver. If the
-room behind the field is closer than 2.3 m, tell us — that limit has to sit between
-the far edge of the field and the nearest thing behind it.
+**Out of range keeps the last real value.** The firmware streams **8 m** when it
+finds nothing — typically the player standing at the very edge of a cone. Any reading
+over 2.3 m (`SOLVER.maxPlayerRangeM`, the far corner of the field is 2.07 m away) is
+treated as inconclusive: the sensor keeps its last real reading (shown as *edge* /
+*held*) so the cursor stays put instead of dropping. `holdOutOfRangeMs` limits how long
+(0 = until a real reading arrives).
 
 Older formats are still accepted: JSON `{"box": 0, "ranges": [1420]}` (millimetres; a
 two-value list from the earlier two-transducer firmware is collapsed to the nearer

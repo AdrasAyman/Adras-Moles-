@@ -101,8 +101,8 @@ function updateSensorReadings() {
       // Values are held until a sensor sends again; say so once it's been a while.
       const held = Tracker.src !== "mouse" && ages[i] != null && ages[i] >= 1000;
       const bg = Tracker.background[i];
-      val.textContent = bg ? "room" : displayRange(i, r) + (held ? ` · ${(ages[i] / 1000).toFixed(1)}s` : "");
-      val.title = bg ? `reading ${Math.round((Tracker.rawRanges[i] || 0) * 1000)} mm is beyond the play area: the sensor does not see the player`
+      val.textContent = displayRange(i, r) + (bg ? " · edge" : held ? ` · ${(ages[i] / 1000).toFixed(1)}s` : "");
+      val.title = bg ? `sensor reports out of range (${Math.round((Tracker.lastRawOutOfRange[i] || 0) * 100)} cm): keeping its last real reading`
                      : ages[i] == null ? "" : `last reading ${ages[i]} ms ago`;
     }
   });
@@ -166,7 +166,7 @@ function updateHUD() {
     } else if (Tracker.stale) {
       dot.className = "dot bad";
       txt.textContent = "No fix — no sensor is returning an echo";
-    } else if (Tracker.veto) {
+    } else if (Tracker.veto && !(Tracker.fix && Tracker.fix.vetoSoft)) {
       dot.className = "dot bad";
       txt.textContent = "Fix rejected — " + Tracker.reason;
     } else if (Tracker.mode === "one-box" && Tracker.pos) {
@@ -456,6 +456,22 @@ function initApp() {
       if (mouseBtn) mouseBtn.click();
       hideAllOverlays();
     };
+  }
+
+  const sDead = $("#sDead"), vDead = $("#vDead");
+  if (sDead && vDead) {
+    const showDead = () => {
+      vDead.textContent = `${Math.round(AREA.dead * 100)} cm`;
+      const stArea = $("#stArea");
+      if (stArea) stArea.textContent = `${AREA.w.toFixed(2)} × ${AREA.deep.toFixed(2)} m play area · ${AREA.dead.toFixed(2)} m dead zone`;
+    };
+    sDead.value = Math.round(AREA.dead * 100);
+    sDead.oninput = () => {
+      setDeadZone(+sDead.value / 100);
+      if (G.phase !== "play" && G.phase !== "count") buildHoles();
+      showDead();
+    };
+    showDead();
   }
 
   const bindSlider = (id, out, fn, fmt) => {

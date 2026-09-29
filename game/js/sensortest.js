@@ -662,7 +662,7 @@ function updateSidebar() {
   sensors.forEach((sen, i) => {
     const raw = Tracker.rawRanges[i], med = Tracker.ranges[i];
     const st = ST.stats[i];
-    setText("sraw" + i, Tracker.background[i] ? MM(raw) + " room" : MM(raw), Tracker.background[i] ? "warn" : "");
+    setText("sraw" + i, Tracker.background[i] ? MM(raw) + " held" : MM(raw), Tracker.background[i] ? "warn" : "");
     setText("smed" + i, MM(med));
     const age = ages[i];
     setText("sage" + i, Tracker.src === "mouse" || age == null ? "—"
@@ -896,7 +896,7 @@ function syncLayoutControls() {
   if (hint) {
     hint.textContent = !live ? LAYOUTS[Tracker.layout].hint
       : !(Tracker.live.boxes || []).length ? "Live: two boxes, one 50° sensor each. Waiting for packets…"
-      : "Live: two boxes, one 50° sensor each. A reading beyond 2.3 m is shown as \"room\" — that sensor does not see the player.";
+      : "Live: two boxes, one 50° sensor each. An out-of-range reading (8 m) keeps that sensor's last real value, shown as \"held\".";
   }
 }
 

@@ -15,12 +15,25 @@
 const AREA = {
   w: 1.50,           // Play area width in metres
   deep: 1.40,        // Play area depth in metres
-  dead: 0.60,        // Dead zone depth from screen plane
+  dead: 0.60,        // Dead zone depth from screen plane (adjustable in the game sidebar)
   yNear: 0.60,       // Active play area near boundary
   yFar: 2.00,        // Active play area far boundary
   yVisTop: 0.20,     // Top visual boundary for rendering and mouse input
   bodyR: 0.20        // Modelled torso radius (surface to centre)
 };
+
+/** Move the dead-zone line: everything nearer the screen than `m` metres is out of bounds. */
+function setDeadZone(m) {
+  m = Math.max(0.0, Math.min(1.20, +m || 0));
+  AREA.dead = m;
+  AREA.yNear = m;
+  AREA.deep = AREA.yFar - m;
+  try { localStorage.setItem("molefield.deadzone", String(m)); } catch (e) {}
+}
+try {
+  const saved = parseFloat(localStorage.getItem("molefield.deadzone"));
+  if (isFinite(saved)) setDeadZone(saved);
+} catch (e) {}
 
 /* ── Acoustic beam model ──────────────────────────────────────
    `w` on each sensor below is the FULL cone width in degrees.
@@ -56,6 +69,10 @@ const SOLVER = {
      beyond this is the room, not the player: treat it as "no player in
      this cone". Raise it only if the room behind the field is closer. */
   maxPlayerRangeM: 2.3,
+  holdOutOfRangeMs: 0,  // How long a sensor keeps its last real value while it reports
+                        // out-of-range (the firmware streams 8 m when it finds nothing,
+                        // e.g. the player at the very edge). 0 = keep it until a real
+                        // reading arrives, so the cursor never drops at the edge.
 
   /* ── Jitter control ────────────────────────────────────────────
      Players walk. These limits reject readings no walking person
@@ -107,10 +124,14 @@ const LAYOUTS = {
   },
   "2box2s": {
     name: "2 BOXES · 2 SENSORS (50°)",
-    hint: "The rig: each box sends one reading (\"0: <cm>\" / \"1: <cm>\") from a 50° sensor in the corner nearest the screen. Both boxes see the player only in the lens where the two cones overlap; elsewhere one box gives a coarse bearing-and-range fix. A reading beyond 2.3 m is the room behind the player, not the player.",
+    hint: "The rig: two boxes 1.8 m apart, 15 cm outboard of each corner nearest the screen, each sending one reading (\"0: <cm>\" / \"1: <cm>\") from a 50° sensor angled slightly inward. Both boxes see the player where the two cones overlap; elsewhere one box gives a coarse bearing-and-range fix. An out-of-range reading (the firmware's 8 m) keeps that sensor's last real value.",
     s: [
-      { n: "L", x: 0.00, y: 0.30, a:  39.35, w: 50, box: 1, slot: 1 },  // left box  14.35°–64.35°
-      { n: "R", x: 1.50, y: 0.30, a: -39.35, w: 50, box: 2, slot: 1 }   // right box
+      // From 15 cm outboard of a corner the field spans bearings ~5°-80°, so a
+      // 50° cone must point ~40° in to cover it. "Angled slightly in" from the
+      // box's point of view is a large angle in these coordinates: measure it
+      // with the calibration sweep on the sensor test page.
+      { n: "L", x: -0.15, y: 0.30, a:  40, w: 50, box: 1, slot: 1 },  // left box
+      { n: "R", x:  1.65, y: 0.30, a: -40, w: 50, box: 2, slot: 1 }   // right box
     ]
   },
   "4wide": {

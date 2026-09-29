@@ -25,17 +25,21 @@ def status_loop(
     Renders a live, single-line telemetry status update in the terminal.
     """
     time.sleep(1.0)
+    held: dict[int, float] = {}
     while not stop.is_set():
         snap = hub.snapshot()
         r = snap["ranges"]
         n = sum(1 for v in r if v is not None)
-        # A reading beyond the play area is the room behind the player, not the player.
-        fix = solve_sectors([None if v is not None and v > MAX_PLAYER_RANGE else v for v in r],
+        # Out of range means "nothing found": keep the last real value, as the game does.
+        for i, v in enumerate(r):
+            if v is not None and v <= MAX_PLAYER_RANGE:
+                held[i] = v
+        fix = solve_sectors([held[i] if (v is not None and v > MAX_PLAYER_RANGE) else v for i, v in enumerate(r)],
                             LAYOUTS[snap["layout"]])
 
         names = LAYOUT_NAMES.get(snap["layout"], [str(i) for i in range(len(r))])
         cells = " ".join(
-            f"{names[i]}:{'----' if v is None else ('room' if v > MAX_PLAYER_RANGE else f'{v * 1000.0:4.0f}')}"
+            f"{names[i]}:{'----' if v is None else ('edge' if v > MAX_PLAYER_RANGE else f'{v * 1000.0:4.0f}')}"
             + ("" if snap["age_ms"][i] is None or snap["age_ms"][i] < 1000 else f"({snap['age_ms'][i] / 1000:.0f}s)")
             for i, v in enumerate(r)
         )

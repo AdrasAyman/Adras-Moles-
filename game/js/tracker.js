@@ -91,6 +91,8 @@ const Tracker = {
   resetSensors() {
     const n = this.sensors.length;
     this.background = new Array(n).fill(false);
+    this.backgroundSince = new Array(n).fill(0);
+    this.lastRawOutOfRange = new Array(n).fill(null);
     this.rings = [];
     for (let i = 0; i < n; i++) this.rings.push(new MedianRing(SOLVER.medianWindow));
     this.ranges = new Array(n).fill(null);
@@ -130,14 +132,24 @@ const Tracker = {
   /** One genuinely new reading from sensor i (metres, or null for no echo). */
   pushReading(i, v, t) {
     if (i < 0 || i >= this.rings.length) return;
+    this.sensorCounts[i]++;
+    // Beyond the play area the reading is inconclusive: the firmware streams 8 m
+    // when it finds nothing (the player at the very edge, or out of the cone).
+    // Keep the sensor's last real value rather than dropping the cursor — for
+    // holdOutOfRangeMs, or until a real reading arrives when that is 0.
+    const outOfRange = v != null && v > SOLVER.maxPlayerRangeM;
+    if (outOfRange) {
+      if (!this.background[i]) this.backgroundSince[i] = t;
+      this.background[i] = true;
+      const held = SOLVER.holdOutOfRangeMs <= 0 || t - this.backgroundSince[i] <= SOLVER.holdOutOfRangeMs;
+      this.lastRawOutOfRange[i] = v;
+      if (held) return;                 // nothing new for the solver; value stays
+      v = null;                         // held long enough: this sensor sees nobody
+    } else {
+      this.background[i] = false;
+    }
     this.rawRanges[i] = v;
     this.sensorT[i] = t;
-    this.sensorCounts[i]++;
-    // Beyond the play area the sensor is reading the room behind the player,
-    // which means it does NOT see the player: that is a "no echo" for the
-    // solver, and it must not become the reference the range gate judges by.
-    this.background[i] = v != null && v > SOLVER.maxPlayerRangeM;
-    if (this.background[i]) v = null;
     // A reading no walking player could produce is dropped here, before it can
     // reach the median filter or the solver. The sensor keeps its last good value.
     if (this.gates[i] && !this.gates[i].check(v, t)) return;

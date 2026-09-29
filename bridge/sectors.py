@@ -444,6 +444,7 @@ def solve_sectors(
                 )
             elif worst_miss > SOLVER["sector_tol_deg"]:
                 result["veto"] = True
+                result["veto_soft"] = True   # fix kept; calibration hint
                 result["sigma"] = max(
                     result["sigma"], best["dA"] * math.sin(math.radians(worst_miss))
                 )

@@ -151,6 +151,18 @@
         </div>
 
         <div class="sec">
+          <h2>Out of bounds</h2>
+          <div class="field">
+            <label>Dead zone depth from screen <b id="vDead">60 cm</b></label>
+            <input type="range" id="sDead" min="0" max="120" step="5" value="60">
+          </div>
+          <p class="hint">
+            Nearer than this to the screen is out of bounds. Moves the line on the stage
+            and the top view immediately; the mole holes re-spread from the next round.
+          </p>
+        </div>
+
+        <div class="sec">
           <h2>Sensor layout</h2>
           <div id="boxLayout" class="boxgrid"></div>
           <p class="hint" style="margin-top:0.5rem" id="layHint"></p>

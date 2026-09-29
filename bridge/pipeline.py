@@ -16,7 +16,7 @@ import threading
 import time
 from typing import Any, TextIO
 
-from bridge.config import LAYOUTS, MAX_PLAYER_RANGE, SOLVER
+from bridge.config import HOLD_OUT_OF_RANGE_S, LAYOUTS, MAX_PLAYER_RANGE, SOLVER
 from bridge.hub import SensorHub
 from bridge.sectors import MedianRing, RangeGate, solve_sectors
 from bridge.websocket_server import WebSocketServer
@@ -47,6 +47,7 @@ def pump(
     layout = None
     rings: list[MedianRing] = []
     gates: list[RangeGate] = []
+    oor_since: list[float] = []
     last_seq: list[int] = []
     prev_fix: dict | None = None
 
@@ -82,20 +83,30 @@ def pump(
                 gates = [RangeGate(SOLVER["max_range_rate"], SOLVER["range_gate_tol_m"],
                                    SOLVER["range_rejoin_count"]) for _ in r]
                 last_seq = [0] * len(r)
+                oor_since = [0.0] * len(r)
                 prev_fix = None
             fresh = False
             for i, ring in enumerate(rings):
                 if snap["seq"][i] != last_seq[i]:
                     last_seq[i] = snap["seq"][i]
-                    if gates[i].check(r[i], now):      # drop readings no walker could produce
-                        ring.push(r[i], now)
+                    v = r[i]
+                    # Out of range (the firmware's 8 m for "nothing found"): keep the
+                    # sensor's last real value for HOLD_OUT_OF_RANGE_S (0 = until a real
+                    # reading arrives) rather than dropping it.
+                    if v is not None and v > MAX_PLAYER_RANGE:
+                        oor_since[i] = oor_since[i] or now
+                        if HOLD_OUT_OF_RANGE_S <= 0 or now - oor_since[i] <= HOLD_OUT_OF_RANGE_S:
+                            continue
+                        v = None
+                    else:
+                        oor_since[i] = 0.0
+                    if gates[i].check(v, now):      # drop readings no walker could produce
+                        ring.push(v, now)
                         fresh = True
             if not fresh:
                 continue
             max_age = SOLVER["median_max_age_ms"] / 1000.0
-            # A reading beyond the play area is the room behind the player, not the player.
-            med = [None if (v := ring.value(now, max_age)) is not None and v > MAX_PLAYER_RANGE else v
-                   for ring in rings]
+            med = [ring.value(now, max_age) for ring in rings]
             sensors = LAYOUTS[layout]
             fix = solve_sectors(med, sensors, prev_fix)
             if fix["x"] is not None:

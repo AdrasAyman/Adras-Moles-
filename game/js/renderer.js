@@ -295,7 +295,7 @@ function drawStage(dt) {
     // A one-box polar fix is a real fix but a coarse one (a couple of hundred
     // mm rather than a couple of dozen). Draw it dashed and amber so nobody
     // mistakes a degraded cursor for a confident one during testing.
-    const degraded = Tracker.mode === "one-box" || Tracker.veto;
+    const degraded = Tracker.mode === "one-box" || (Tracker.veto && !(Tracker.fix && Tracker.fix.vetoSoft));
     sctx.strokeStyle = G.alarm ? "#FF4D3D"
                      : Tracker.veto ? "#FF4D3D"
                      : degraded ? "#FFB020"

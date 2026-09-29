@@ -473,6 +473,7 @@ function solveSectors(ranges, sensors, opts) {
         result.reason = "ranges inconsistent: circles miss by " + (best.gap * 1000).toFixed(0) + " mm";
       } else if (worstMiss > SOLVER.sectorTolDeg) {
         result.veto = true;
+        result.vetoSoft = true;   // the fix is KEPT; this is a calibration hint, not a rejection
         result.sigma = Math.max(result.sigma, best.dA * Math.sin(worstMiss * DEG));
         result.reason = "fix sits " + worstMiss.toFixed(1) + " deg outside box " + (worstBox + 1) +
                         "'s cone — check the aim / width calibration";

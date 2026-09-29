@@ -33,10 +33,11 @@ LAYOUTS: dict[str, list[tuple[float, float, float, float]]] = {
         (1.50, 0.30, -51.85, 25.0),   # X  right box, wall-side half
         (1.50, 0.30, -26.85, 25.0),   # Y  right box, forward half
     ],
-    # Two boxes upstreaming ONE normalised value each: one 50 deg sensor per box.
+    # The rig: two boxes 1.8 m apart (15 cm outboard of each front corner), one
+    # 50 deg sensor each, angled slightly inward.
     "2box2s": [
-        (0.00, 0.30,  39.35, 50.0),   # L  left box
-        (1.50, 0.30, -39.35, 50.0),   # R  right box
+        (-0.15, 0.30,  40.0, 50.0),   # L  left box (aim: measure on the test page)
+        ( 1.65, 0.30, -40.0, 50.0),   # R  right box
     ],
     "2box": [
         (0.10, 0.30, 14.0, 40.0),
@@ -80,6 +81,10 @@ VALUES_PER_BOX_LAYOUT: dict[int, str] = {1: "2box2s", 2: "2box4s"}
 # ends 2.0 m from the screen and the far corner is ~2.07 m from a box. It is the
 # wall or furniture behind the player, i.e. the sensor does NOT see the player.
 MAX_PLAYER_RANGE: float = 2.3
+# ...but the firmware streams 8 m when it finds nothing (e.g. the player at the very
+# edge), so an out-of-range reading keeps the sensor's last real value for this long
+# (seconds; 0 = until a real reading arrives) rather than dropping the cursor.
+HOLD_OUT_OF_RANGE_S: float = 0.0
 
 SOLVER: dict[str, float] = {
     "median_window": 5,      # At most this many readings of one sensor are medianed

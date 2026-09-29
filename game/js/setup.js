@@ -54,7 +54,7 @@ const Setup = {
       const boxes = Tracker.live.boxes || [];
       const bg = boxes.filter(b => Tracker.background[b.box]).map(b => "box " + (b.box + 1));
       mode.textContent = !boxes.length ? "waiting for packets"
-        : "2 sensors · one 50° reading per box" + (bg.length ? ` · ${bg.join(" & ")} sees the room, not the player` : "");
+        : "2 sensors · one 50° reading per box" + (bg.length ? ` · ${bg.join(" & ")} out of range, holding last value` : "");
       mode.style.color = bg.length ? "var(--amber)" : "";
     }
 
