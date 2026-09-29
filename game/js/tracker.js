@@ -45,11 +45,10 @@ const Tracker = {
   dirty: false,
   stale: false,
   wsState: "closed",  // read by the setup wizard (setup.js)
-  layout: "2box4s",
+  layout: LIVE_LAYOUT,
   layoutSource: "default",   // "default" | "user" | "bridge"
-  valuesPerBox: 2,
-  mixed: false,              // bridge saw boxes sending different value counts
-  detected: false,           // bridge has decided the value count from real packets
+  valuesPerBox: 1,
+  background: [],            // per sensor: latest reading was the room, not the player
   ageSpreadMs: 0,            // how far apart in time the readings of the last solve were
 
   // Jitter control (see SOLVER in config.js)
@@ -91,6 +90,7 @@ const Tracker = {
 
   resetSensors() {
     const n = this.sensors.length;
+    this.background = new Array(n).fill(false);
     this.rings = [];
     for (let i = 0; i < n; i++) this.rings.push(new MedianRing(SOLVER.medianWindow));
     this.ranges = new Array(n).fill(null);
@@ -130,14 +130,19 @@ const Tracker = {
   /** One genuinely new reading from sensor i (metres, or null for no echo). */
   pushReading(i, v, t) {
     if (i < 0 || i >= this.rings.length) return;
+    this.rawRanges[i] = v;
+    this.sensorT[i] = t;
+    this.sensorCounts[i]++;
+    // Beyond the play area the sensor is reading the room behind the player,
+    // which means it does NOT see the player: that is a "no echo" for the
+    // solver, and it must not become the reference the range gate judges by.
+    this.background[i] = v != null && v > SOLVER.maxPlayerRangeM;
+    if (this.background[i]) v = null;
     // A reading no walking player could produce is dropped here, before it can
     // reach the median filter or the solver. The sensor keeps its last good value.
     if (this.gates[i] && !this.gates[i].check(v, t)) return;
     this.rings[i].push(v, t);
     this.rangeHist[i].push({ v: v, t: t });
-    this.rawRanges[i] = v;
-    this.sensorT[i] = t;
-    this.sensorCounts[i]++;
     this.dirty = true;
   },
 
@@ -226,7 +231,16 @@ const Tracker = {
       this.reason = fix.reason;
       this.res = fix.residual;
       this.nSensors = this.ranges.filter(r => r != null).length;
-      if (fix.x != null) {
+      const inField = fix.x != null &&
+        fix.x >= -0.30 && fix.x <= AREA.w + 0.30 && fix.y >= AREA.yVisTop - 0.10 && fix.y <= AREA.yFar + 0.30;
+      if (fix.x != null && !inField) {
+        // Two inconsistent ranges can intersect far outside the room. That is
+        // not the player; keep the cursor where it was rather than fling it.
+        this.fix.veto = true;
+        this.fix.reason = "fix lands outside the play area (" + fix.x.toFixed(2) + ", " + fix.y.toFixed(2) + ")";
+        this.veto = true;
+        this.reason = this.fix.reason;
+      } else if (fix.x != null) {
         measured = { x: fix.x, y: fix.y };
         this.raw = measured;
       }
@@ -444,24 +458,24 @@ const Tracker = {
     if (this.src !== "live") return;
     const now = performance.now();
 
-    // Which layout does this frame describe?
+    // Which layout does this frame describe? The bridge always sends the two
+    // sensor rig; a direct single-box packet is one value from that box.
     let key = null;
-    if (m.box != null) key = VALUES_PER_BOX_LAYOUT[m.ranges.length];
+    if (m.box != null) key = LIVE_LAYOUT;
     else if (m.layout && LAYOUTS[m.layout]) key = m.layout;
     else key = VALUES_PER_BOX_LAYOUT[m.ranges.length / 2];
     if (!key) return;
-    if (m.values_per_box) this.valuesPerBox = m.values_per_box;
-    this.detected = m.detected !== false;
-    this.mixed = !!m.mixed;
+    this.valuesPerBox = m.values_per_box || 1;
     if (key !== this.layout) this.setLayout(key, "bridge");
     else this.layoutSource = "bridge";
     this.ensureRings();
 
     const mm = v => (v == null ? null : v / 1000.0);
     if (m.box != null) {
-      // Direct single-box packet: every value in it is new.
-      const vpb = m.ranges.length;
-      m.ranges.forEach((v, k) => this.pushReading((m.box | 0) * vpb + k, mm(v), now));
+      // Direct single-box packet: one new reading for that box (the nearer
+      // echo if the older two-transducer firmware sent two).
+      const present = m.ranges.filter(v => v != null && v > 0);
+      this.pushReading(m.box | 0, present.length ? mm(Math.min.apply(null, present)) : null, now);
     } else {
       for (let i = 0; i < this.sensors.length; i++) {
         const v = mm(m.ranges[i]);

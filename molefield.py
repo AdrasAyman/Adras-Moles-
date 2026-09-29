@@ -24,9 +24,9 @@ import webbrowser
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 from bridge.cli import DIVIDER_BAR, build_arg_parser, status_loop
-from bridge.config import DEFAULTS, LAYOUTS, VALUES_PER_BOX_LAYOUT
+from bridge.config import DEFAULTS, LAYOUTS, LIVE_LAYOUT
 from bridge.hub import SensorHub
-from bridge.networking import simulator_thread, sync_beacon, udp_listener
+from bridge.networking import replay_thread, simulator_thread, sync_beacon, udp_listener
 from bridge.pipeline import pump
 from bridge.telemetry_api import TelemetryAPI
 from bridge.telemetry_db import TelemetryStore, default_db_path
@@ -39,15 +39,13 @@ def main():
     args = parser.parse_args()
 
     stop_event = threading.Event()
-    start_values = args.sim_values if args.simulate else args.values
-    start_layout = VALUES_PER_BOX_LAYOUT[start_values]
+    start_layout = LIVE_LAYOUT
 
     print(DIVIDER_BAR)
     print("  MOLEFIELD  -  Full-Body Whack-a-Mole")
     print(DIVIDER_BAR)
     print(
-        f"  sensors: auto-detect 1 or 2 values per box "
-        f"(assuming {start_values} until packets arrive); "
+        "  sensors: two boxes, one 50 deg sensor each; "
         + ("values held until each box sends again" if args.stale_ms == 0
            else f"values expire after {args.stale_ms} ms")
     )
@@ -120,9 +118,18 @@ def main():
         print(f"  Logging telemetry frames to {args.log}")
 
     # ── Sensor Hub & Workers ─────────────────────────────────────────────────
-    hub = SensorHub(args.stale_ms, DEFAULTS["alive_s"], start_values)
+    hub = SensorHub(args.stale_ms, DEFAULTS["alive_s"])
+    capture_file = None
 
-    if args.simulate:
+    if args.replay:
+        threading.Thread(
+            target=replay_thread,
+            args=(hub, args.replay, args.units, stop_event, args.replay_speed),
+            daemon=True,
+            name="replay",
+        ).start()
+        print(f"  REPLAY: feeding {args.replay} at {args.replay_speed:g}x")
+    elif args.simulate:
         walker = Walker(
             sensors=LAYOUTS[start_layout],
             noise=args.noise / 1000.0,
@@ -130,16 +137,21 @@ def main():
         )
         threading.Thread(
             target=simulator_thread,
-            args=(hub, walker, args.sim_values, args.sync_hz, args.sim_timing, stop_event),
+            args=(hub, walker, 1, args.sync_hz, args.sim_timing, stop_event),
             daemon=True,
             name="sim",
         ).start()
-        print(f"  SIMULATE: synthetic body, {args.sim_values} value(s) per box, "
-              f"{args.sim_timing} timing.")
+        print(f"  SIMULATE: synthetic body, one value per box, {args.sim_timing} timing.")
     else:
+        # Every raw datagram is kept so a live test can be sent back and replayed.
+        cap_dir = os.path.join(os.path.dirname(db_path), "")
+        os.makedirs(cap_dir, exist_ok=True)
+        cap_path = os.path.join(cap_dir, time.strftime("udp-%Y%m%d-%H%M%S.log"))
+        capture_file = open(cap_path, "a", encoding="utf-8", buffering=1)
+        print(f"  Raw packet capture: {cap_path}")
         threading.Thread(
             target=udp_listener,
-            args=(hub, args.udp, stop_event, print),
+            args=(hub, args.udp, stop_event, print, args.units, capture_file),
             daemon=True,
             name="udp",
         ).start()
@@ -212,6 +224,8 @@ def main():
         for sid in store.stale_open_sessions(0):
             api.end(sid)
         store.close()
+        if capture_file:
+            capture_file.close()
 
 
 if __name__ == "__main__":

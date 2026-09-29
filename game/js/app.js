@@ -100,8 +100,10 @@ function updateSensorReadings() {
     if (val) {
       // Values are held until a sensor sends again; say so once it's been a while.
       const held = Tracker.src !== "mouse" && ages[i] != null && ages[i] >= 1000;
-      val.textContent = displayRange(i, r) + (held ? ` · ${(ages[i] / 1000).toFixed(1)}s` : "");
-      val.title = ages[i] == null ? "" : `last reading ${ages[i]} ms ago`;
+      const bg = Tracker.background[i];
+      val.textContent = bg ? "room" : displayRange(i, r) + (held ? ` · ${(ages[i] / 1000).toFixed(1)}s` : "");
+      val.title = bg ? `reading ${Math.round((Tracker.rawRanges[i] || 0) * 1000)} mm is beyond the play area: the sensor does not see the player`
+                     : ages[i] == null ? "" : `last reading ${ages[i]} ms ago`;
     }
   });
 
@@ -215,7 +217,24 @@ function updateHUD() {
   }
 }
 
+let loopErrors = 0;
+
 function mainLoop(now) {
+  // One uncaught error in here used to stop the animation loop for good — the
+  // page would "fizzle out" and never draw again. Log it and keep going.
+  try {
+    mainLoopBody(now);
+  } catch (e) {
+    if (loopErrors++ < 5) console.error("mainLoop:", e);
+    if (typeof Telemetry !== "undefined" && loopErrors <= 20) {
+      Telemetry.event("system", "js_error", { where: "mainLoop", message: String(e && e.message || e), stack: String(e && e.stack || "").slice(0, 400) });
+    }
+    lastTimestamp = now;
+  }
+  requestAnimationFrame(mainLoop);
+}
+
+function mainLoopBody(now) {
   const dt = Math.min(0.05, (now - lastTimestamp) / 1000.0);
   lastTimestamp = now;
 
@@ -334,7 +353,6 @@ function mainLoop(now) {
   drawStage(dt);
   drawRadar();
   updateHUD();
-  requestAnimationFrame(mainLoop);
 }
 
 /* ── Level select on the start overlay ─────────────────────── */

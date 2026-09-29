@@ -71,13 +71,20 @@ BEAM_MAX_RANGE: float = 2.40   # Hard ceiling from ECHO_TIMEOUT_US in firmware
 BEAM_MIN_RANGE: float = 0.04
 
 # Solver / filter tuning. Must mirror SOLVER in game/js/config.js.
-# Which layout a given number of values per box means (see hub.py).
+# The live rig: two boxes, one 50 deg sensor each, in the corners nearest the screen.
+LIVE_LAYOUT: str = "2box2s"
+# Kept so older recorded sessions (four 25 deg sensors) can still be analysed.
 VALUES_PER_BOX_LAYOUT: dict[int, str] = {1: "2box2s", 2: "2box4s"}
+
+# A reading further than this (m, surface) cannot be the player: the play area
+# ends 2.0 m from the screen and the far corner is ~2.07 m from a box. It is the
+# wall or furniture behind the player, i.e. the sensor does NOT see the player.
+MAX_PLAYER_RANGE: float = 2.3
 
 SOLVER: dict[str, float] = {
     "median_window": 5,      # At most this many readings of one sensor are medianed
     "median_max_age_ms": 500,  # ...and only readings this recent (then: last value)
-    "max_range_rate": 2.0,     # m/s - a range changing faster than a walk is ignored (0 = off)
+    "max_range_rate": 0.0,     # m/s - per-sensor range gate; off by default (see game/js/config.js)
     "range_gate_tol_m": 0.12,  # m - noise allowance on top of that
     "range_rejoin_count": 3,   # this many agreeing rejected readings are accepted after all
     "sector_tol_deg": 6.0,   # Slack before a fix is vetoed for leaving its cone
@@ -89,7 +96,8 @@ SOLVER: dict[str, float] = {
 DEFAULTS: dict[str, int | float] = {
     "http": 8000,
     "ws": 8765,
-    "udp": 5000,   # matches the deployed ESP32 test firmware (esp_test_files/ESP_code)
+    "udp": 5000,   # matches the deployed ESP32 firmware
+    "units": "cm", # unit of a bare "<box>: <value>" datagram (JSON is always mm)
     "sync": 4211,
     "rate": 30.0,         # Frames per second pushed to the game UI over WS
     "sync_hz": 15.6,      # Ping slot beacon cycles per second across all boxes

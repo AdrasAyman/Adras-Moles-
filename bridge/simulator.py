@@ -22,6 +22,7 @@ class Walker:
         noise: float = 0.008,
         drop: float = 0.03,
         beam: float | None = None,
+        background: float = 3.5,
     ):
         """
         `beam` overrides every sensor's FULL cone width, in degrees — the same
@@ -34,6 +35,9 @@ class Walker:
         self.noise = noise
         self.drop = drop
         self.beam_override = None if beam is None else math.radians(beam / 2.0)
+        # What a sensor reads when the player is outside its cone: the room behind
+        # the field, as real ultrasonic sensors do. 0 = no echo (the old assumption).
+        self.background = background
         self.t = 0.0
 
     def _half(self, sensor: Sequence[float]) -> float:
@@ -66,9 +70,12 @@ class Walker:
             d = math.hypot(dx, dy)
             bearing = math.atan2(dx, dy)
 
-            # Check if player is outside the sensor's angular cone or maximum range
+            # Outside the cone (or beyond range) the sensor sees the room, not the player
             if abs(bearing - math.radians(ang)) > self._half(sensor) or d - BODY_R > BEAM_MAX_RANGE:
-                out.append(None)
+                if self.background > 0 and random.random() >= self.drop:
+                    out.append(round((self.background + random.gauss(0, 0.05)) * 1000.0))
+                else:
+                    out.append(None)
             elif random.random() < self.drop:
                 out.append(None)
             else:

@@ -92,7 +92,11 @@ class RangeGate:
         self.total = 0
 
     def check(self, v: float | None, t: float) -> bool:
-        if v is None or self.rate <= 0 or self.last is None:
+        # A no-echo says nothing about the player: pass it without touching the
+        # reference or the rejoin count (mirrors RangeGate in game/js/sectors.js).
+        if v is None:
+            return True
+        if self.rate <= 0 or self.last is None:
             return self._accept(v, t)
         allowed = self.rate * max(0.0, t - self.last_t) + self.tol
         if abs(v - self.last) <= allowed:

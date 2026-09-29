@@ -160,17 +160,12 @@
           <details>
             <summary>Firmware contract</summary>
             <p class="hint" style="margin-bottom:0.5rem">
-              In <code>LIVE</code> mode the bridge (<code>python molefield.py</code>) listens for ESP32 sensor boxes on <code>UDP :5000</code> and forwards merged frames to this page over WebSocket. It accepts the deployed test firmware's plain-text datagrams:
+              In <code>LIVE</code> mode the bridge (<code>python molefield.py</code>) listens for the two ESP32 sensor boxes on <code>UDP :5000</code> and forwards each new reading to this page over WebSocket. Each box sends one line per reading, whenever it has one:
             </p>
-            <pre>Box:1,S1:120.5,S2:115.2</pre>
-            <p class="hint" style="margin:0.4rem 0">
-              (<code>Sn</code> values are centimetres to the nearest surface; <code>-1</code> means no echo.) It also accepts the JSON format from <code>firmware/molefield_sensor.ino</code>:
-            </p>
-            <pre>{ "box": 0,
-  "t": 184213,
-  "ranges": [1420, 1655] }</pre>
+            <pre>0: 142.5
+1: 98.0</pre>
             <p class="hint">
-              Box 0 is the left-hand box and Box 1 the right-hand box. Each box sends either <b>one</b> value (a normalised reading, treated as one 50° sensor) or <b>two</b> (two 25° sensors); the bridge detects which. Boxes may send whenever they like — each sensor's last value is kept until it sends a new one.
+              <code>0</code> is the left box, <code>1</code> the right; the number is centimetres to the nearest surface (<code>-1</code> = no echo). Each box's last value is kept until it sends again. A reading beyond 2.3 m is the room behind the player, not the player — it is shown as <b>room</b> and that sensor is treated as not seeing anyone. Every raw packet is also saved to <code>logs/udp-*.log</code> so a test can be replayed later.
             </p>
           </details>
         </div>

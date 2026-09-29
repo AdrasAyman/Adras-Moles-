@@ -12,6 +12,7 @@ from __future__ import annotations
 import math
 from typing import Any, Sequence
 
+from bridge.config import MAX_PLAYER_RANGE
 from bridge.telemetry_db import MAX_SENSORS, SAMPLE_COLS, TelemetryStore
 
 SUMMARY_VERSION = 2   # 2: configuration label, per-sensor update rates and hold times
@@ -120,6 +121,9 @@ def summarize(store: TelemetryStore, session_id: int) -> dict[str, Any] | None:
         med = [r[ix[f"m{i}"]] for r in rows]
         live_raw = [r[ix[f"r{i}"]] for r in live_rows]
         present = [x for x in raw if x is not None]
+        # Beyond the play area the sensor was looking at the room, not the player.
+        bg_mm = MAX_PLAYER_RANGE * 1000.0
+        room = sum(1 for x in live_raw if x is not None and x > bg_mm)
         longest = 0
         for e in events:
             if e["type"] == "dropout" and e["data"].get("sensor") == i:
@@ -143,6 +147,8 @@ def summarize(store: TelemetryStore, session_id: int) -> dict[str, Any] | None:
         sensors.append({
             "index": i,
             "echo_rate": (sum(1 for x in live_raw if x is not None) / len(live_raw)) if live_raw else None,
+            "player_rate": (sum(1 for x in live_raw if x is not None and x <= bg_mm) / len(live_raw)) if live_raw else None,
+            "room_rate": (room / len(live_raw)) if live_raw else None,
             "raw": describe(present),
             "median": describe([x for x in med if x is not None]),
             "hist": histogram(present, HIST_BIN_MM, 0, HIST_MAX_MM),

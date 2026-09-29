@@ -113,7 +113,11 @@ class RangeGate {
   /** Is reading v (metres, or null) at time t (ms) plausible? Updates state. */
   check(v, t) {
     const rate = SOLVER.maxRangeRate;
-    if (v == null || !(rate > 0) || this.last == null) return this.accept(v, t);
+    // A no-echo says nothing about where the player is: let it through without
+    // touching the reference or the rejoin count (a rejoin interrupted by a
+    // dropout used to start over, which could hold a sensor on a stale value).
+    if (v == null) return true;
+    if (!(rate > 0) || this.last == null) return this.accept(v, t);
 
     const allowed = rate * Math.max(0, (t - this.lastT) / 1000) + SOLVER.rangeGateTolM;
     if (Math.abs(v - this.last) <= allowed) return this.accept(v, t);

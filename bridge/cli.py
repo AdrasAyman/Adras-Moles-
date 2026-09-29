@@ -8,7 +8,7 @@ import argparse
 import sys
 import threading
 import time
-from bridge.config import DEFAULTS, LAYOUT_NAMES, LAYOUTS
+from bridge.config import DEFAULTS, LAYOUT_NAMES, LAYOUTS, MAX_PLAYER_RANGE
 from bridge.hub import SensorHub
 from bridge.sectors import solve_sectors
 from bridge.websocket_server import WebSocketServer
@@ -29,11 +29,13 @@ def status_loop(
         snap = hub.snapshot()
         r = snap["ranges"]
         n = sum(1 for v in r if v is not None)
-        fix = solve_sectors(r, LAYOUTS[snap["layout"]])
+        # A reading beyond the play area is the room behind the player, not the player.
+        fix = solve_sectors([None if v is not None and v > MAX_PLAYER_RANGE else v for v in r],
+                            LAYOUTS[snap["layout"]])
 
         names = LAYOUT_NAMES.get(snap["layout"], [str(i) for i in range(len(r))])
         cells = " ".join(
-            f"{names[i]}:{'----' if v is None else f'{v * 1000.0:4.0f}'}"
+            f"{names[i]}:{'----' if v is None else ('room' if v > MAX_PLAYER_RANGE else f'{v * 1000.0:4.0f}')}"
             + ("" if snap["age_ms"][i] is None or snap["age_ms"][i] < 1000 else f"({snap['age_ms'][i] / 1000:.0f}s)")
             for i, v in enumerate(r)
         )
@@ -46,8 +48,7 @@ def status_loop(
                 f"{tag} x={fix['x']:.2f} y={fix['y']:.2f} "
                 f"+-{fix['sigma'] * 1000.0:3.0f}mm{flag}"
             )
-        mode = (f"{snap['values_per_box']} val/box" + ("" if snap["detected"] else "?")
-                + (" MIXED" if snap["mixed"] else ""))
+        mode = "2x50deg"
         boxes = " ".join(
             f"box{b + 1}:{v['hz']:4.1f}Hz{'' if v['alive'] else ' OFF'}"
             for b, v in hub.live_boxes()
@@ -71,12 +72,22 @@ def build_arg_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
-        "--values",
-        type=int,
-        choices=(1, 2),
-        default=2,
-        help="values per box to assume until packets arrive and the real count "
-             "is detected (1 = one 50 deg sensor per box, 2 = two 25 deg sensors)",
+        "--units",
+        choices=("cm", "mm"),
+        default=d["units"],
+        help="unit of the bare number in a '<box>: <value>' datagram",
+    )
+    parser.add_argument(
+        "--replay",
+        metavar="FILE",
+        default="",
+        help="replay a logs/udp-*.log capture instead of listening for boxes",
+    )
+    parser.add_argument(
+        "--replay-speed",
+        type=float,
+        default=1.0,
+        help="replay speed multiplier",
     )
     parser.add_argument("--http", type=int, default=d["http"], help="HTTP port")
     parser.add_argument("--ws", type=int, default=d["ws"], help="WebSocket port")
@@ -105,13 +116,6 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--simulate",
         action="store_true",
         help="synthesise a walking body instead of reading hardware",
-    )
-    parser.add_argument(
-        "--sim-values",
-        type=int,
-        choices=(1, 2),
-        default=2,
-        help="simulated boxes send this many values each",
     )
     parser.add_argument(
         "--sim-timing",

@@ -91,8 +91,8 @@
           <div class="field" style="margin-top:0.5rem">
             <label>Layout</label>
             <div class="seg" role="group">
-              <button data-lay="2box4s" aria-pressed="true">4 SENSORS · 25°</button>
-              <button data-lay="2box2s" aria-pressed="false">2 SENSORS · 50°</button>
+              <button data-lay="2box2s" aria-pressed="true">2 SENSORS · 50°</button>
+              <button data-lay="2box4s" aria-pressed="false">OLD 4 × 25°</button>
               <button data-lay="4wide" aria-pressed="false">4 SPLAYED</button>
             </div>
             <p class="hint" id="stLayHint" style="margin-top:0.4rem"></p>
@@ -210,16 +210,20 @@
             <input type="range" id="sBeam" min="0" max="80" value="0">
           </div>
           <div class="field">
+            <label>Room behind the field <b id="vBg">3.5 m</b></label>
+            <input type="range" id="sBg" min="0" max="60" value="35">
+          </div>
+          <div class="field">
             <label>Wild readings <b id="vSpike">0 %</b></label>
             <input type="range" id="sSpike" min="0" max="30" value="0">
           </div>
           <div class="field">
-            <label>Walking speed limit <b id="vRate">2.0 m/s</b></label>
-            <input type="range" id="sRate" min="0" max="50" value="20">
+            <label>Walking speed limit (range gate) <b id="vRate">off</b></label>
+            <input type="range" id="sRate" min="0" max="50" value="0">
           </div>
           <div class="field">
-            <label>Averaging window (standing) <b id="vAvg">1000 ms</b></label>
-            <input type="range" id="sAvg" min="0" max="2000" step="50" value="1000">
+            <label>Averaging window (standing) <b id="vAvg">600 ms</b></label>
+            <input type="range" id="sAvg" min="0" max="2000" step="50" value="600">
           </div>
           <div class="field">
             <label>Smoothing α <b id="vAlpha">0.35</b></label>
@@ -231,7 +235,8 @@
             assumes the configured one — the mis-calibration test.
           </p>
           <p class="hint" style="margin-top:0.4rem">
-            <b>Wild readings</b> injects stray echoes. <b>Walking speed limit</b> ignores
+            <b>Room behind the field</b> is what a sensor reads when the player is
+            outside its cone (0 = no echo, as the old sim assumed). <b>Wild readings</b> injects stray echoes. <b>Walking speed limit</b> ignores
             readings that change faster than a walk (0 = off). <b>Averaging window</b>
             smooths the cursor while the player stands still, shrinking to 250 ms as they
             walk so it doesn't trail behind (0 = off, α filter instead). Watch <i>Cursor wobble</i> in

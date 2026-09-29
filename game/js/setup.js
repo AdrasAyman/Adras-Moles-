@@ -52,11 +52,10 @@ const Setup = {
     const mode = document.getElementById("setupMode");
     if (mode) {
       const boxes = Tracker.live.boxes || [];
+      const bg = boxes.filter(b => Tracker.background[b.box]).map(b => "box " + (b.box + 1));
       mode.textContent = !boxes.length ? "waiting for packets"
-        : Tracker.mixed ? "boxes disagree — one sends 1 value, the other 2"
-        : Tracker.sensors.length === 2 ? "2 sensors · one 50° reading per box"
-        : "4 sensors · two 25° readings per box";
-      mode.style.color = Tracker.mixed ? "var(--alarm)" : "";
+        : "2 sensors · one 50° reading per box" + (bg.length ? ` · ${bg.join(" & ")} sees the room, not the player` : "");
+      mode.style.color = bg.length ? "var(--amber)" : "";
     }
 
     const doneBtn = document.getElementById("btnSetupDone");

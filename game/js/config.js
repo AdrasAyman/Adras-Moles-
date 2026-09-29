@@ -49,21 +49,32 @@ const SOLVER = {
   holdMismatchMs: 750,  // Two boxes' values this far apart in time get flagged
   measureHz: 15.6,      // Regular sim rate (the old slotted ping rate)
 
+  /* ── Background rejection ──────────────────────────────────────
+     An ultrasonic sensor that is NOT looking at the player does not
+     return nothing — it returns the wall or furniture behind them. The
+     far corner of the play area is ~2.07 m from a box, so any reading
+     beyond this is the room, not the player: treat it as "no player in
+     this cone". Raise it only if the room behind the field is closer. */
+  maxPlayerRangeM: 2.3,
+
   /* ── Jitter control ────────────────────────────────────────────
      Players walk. These limits reject readings no walking person
      could produce, then average what is left. */
-  maxRangeRate: 2.0,    // m/s — a sensor's range can't change faster than a brisk
-                        // walk; a reading further from that sensor's last accepted
-                        // value than (maxRangeRate × time since) + tolerance is
-                        // ignored. 0 turns the range gate off.
+  maxRangeRate: 0,      // m/s — per-sensor range gate: a reading further from that
+                        // sensor's last accepted value than (maxRangeRate × time
+                        // since) + tolerance is ignored. OFF by default: measured
+                        // against the median filter + background rule it removed
+                        // ~15% of readings and changed accuracy by nothing (10 vs
+                        // 12 mm standing, 155 vs 159 mm walking). Bench slider.
   rangeGateTolM: 0.12,  // m — allowance for ordinary sensor noise on top of that
   rangeRejoinCount: 3,  // ...unless this many rejected readings in a row agree with
                         // each other: then the player really is there, so accept.
-  averageMs: 1000,      // Cursor = time-weighted average position over this window
+  averageMs: 600,       // Cursor = time-weighted average position over this window
                         // while the player stands still. 0 = no averaging (alpha-beta).
-  averageMinMs: 250,    // ...shrinking to this while they walk. A fixed 1 s average
-                        // trails a walking player by ~45 cm; standing still on a mole
-                        // is where steadiness matters, walking is where lag does.
+  averageMinMs: 150,    // ...shrinking to this while they walk. Measured on the live
+                        // format: 1000/250 ms gave 12 mm wobble standing and 155 mm
+                        // lag at 0.4 m/s; 600/150 ms gives 15 mm and 117 mm. Walking
+                        // to the next mole is where lag hurts, so the shorter window.
   stillSpeed: 0.20,     // m/s — at or below: full window
   walkSpeed: 0.60,      // m/s — at or above: shortest window
   maxSpeed: 2.5,        // m/s — solved positions implying faster movement are rejected
@@ -85,8 +96,8 @@ const LAYOUTS = {
     ]
   },
   "2box4s": {
-    name: "2 BOXES · 4 SENSORS (25°)",
-    hint: "Four values upstreamed: Box 1 sends A and B, Box 2 sends X and Y. Each sensor covers 25°, and the two in a box are aimed 25° apart so together they tile the box's 50° field. Which of the pair fired tells the sector solver which half of the box's field the player is in.",
+    name: "2 BOXES · 4 SENSORS (25°) — older recordings",
+    hint: "The earlier firmware, kept so old sessions in the logs can be compared. Four values upstreamed: Box 1 sends A and B, Box 2 sends X and Y. Each sensor covers 25°, and the two in a box are aimed 25° apart so together they tile the box's 50° field. Which of the pair fired tells the sector solver which half of the box's field the player is in.",
     s: [
       { n: "A", x: 0.00, y: 0.30, a:  26.85, w: 25, box: 1, slot: 1 },  // left box, forward half   14.35°–39.35°
       { n: "B", x: 0.00, y: 0.30, a:  51.85, w: 25, box: 1, slot: 2 },  // left box, wall-side half 39.35°–64.35°
@@ -96,7 +107,7 @@ const LAYOUTS = {
   },
   "2box2s": {
     name: "2 BOXES · 2 SENSORS (50°)",
-    hint: "Two values upstreamed: each box normalises its pair of transducers into one reading covering 50°. Same field of view as the four-sensor setup, but each box only knows the player is somewhere in its 50° cone.",
+    hint: "The rig: each box sends one reading (\"0: <cm>\" / \"1: <cm>\") from a 50° sensor in the corner nearest the screen. Both boxes see the player only in the lens where the two cones overlap; elsewhere one box gives a coarse bearing-and-range fix. A reading beyond 2.3 m is the room behind the player, not the player.",
     s: [
       { n: "L", x: 0.00, y: 0.30, a:  39.35, w: 50, box: 1, slot: 1 },  // left box  14.35°–64.35°
       { n: "R", x: 1.50, y: 0.30, a: -39.35, w: 50, box: 2, slot: 1 }   // right box
@@ -122,6 +133,7 @@ LAYOUTS["2box"] = LAYOUTS["2box4s"];
    tags every frame with the matching layout; these are the two layouts
    it can report. */
 const VALUES_PER_BOX_LAYOUT = { 1: "2box2s", 2: "2box4s" };
+const LIVE_LAYOUT = "2box2s";   // the rig: two boxes, one 50° sensor each
 
 /** Box groupings for a layout, derived from each sensor's `box` field. */
 function boxesFor(layoutKey) {

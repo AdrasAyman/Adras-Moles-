@@ -79,6 +79,9 @@ class WebSocketServer(threading.Thread):
             conn.sendall(response.encode())
             conn.settimeout(None)
 
+            # A client that stops reading must never stall the pump for everyone
+            # else: sends time out quickly and a stuck client is dropped.
+            conn.settimeout(0.5)
             with self.lock:
                 self.clients.add(conn)
 
@@ -97,20 +100,27 @@ class WebSocketServer(threading.Thread):
     # ── Inbound Frame Reader ──────────────────────────────────────────────────
     def _read_loop(self, conn: socket.socket):
         while True:
-            hdr = self._recv_exact(conn, 2)
+            try:
+                hdr = self._recv_exact(conn, 2)
+            except socket.timeout:
+                if conn not in self.clients:      # dropped by a failed broadcast
+                    return
+                continue
             if not hdr:
                 return
             opcode = hdr[0] & 0x0F
             masked = hdr[1] & 0x80
             length = hdr[1] & 0x7F
 
-            if length == 126:
-                length = struct.unpack(">H", self._recv_exact(conn, 2))[0]
-            elif length == 127:
-                length = struct.unpack(">Q", self._recv_exact(conn, 8))[0]
-
-            mask = self._recv_exact(conn, 4) if masked else b""
-            payload = self._recv_exact(conn, length) if length else b""
+            try:
+                if length == 126:
+                    length = struct.unpack(">H", self._recv_exact(conn, 2))[0]
+                elif length == 127:
+                    length = struct.unpack(">Q", self._recv_exact(conn, 8))[0]
+                mask = self._recv_exact(conn, 4) if masked else b""
+                payload = self._recv_exact(conn, length) if length else b""
+            except (socket.timeout, TypeError):
+                return
 
             if masked and payload:
                 payload = bytes(b ^ mask[i % 4] for i, b in enumerate(payload))
@@ -151,7 +161,9 @@ class WebSocketServer(threading.Thread):
 
     def broadcast(self, text: str):
         """
-        Pushes a UTF-8 text frame to all connected WebSocket clients.
+        Pushes a UTF-8 text frame to all connected WebSocket clients. A client
+        whose socket will not accept the frame within its timeout is dropped
+        rather than allowed to block the sender.
         """
         frame = self._frame(0x1, text.encode("utf-8"))
         with self.lock:
@@ -159,9 +171,13 @@ class WebSocketServer(threading.Thread):
         for client in targets:
             try:
                 client.sendall(frame)
-            except OSError:
+            except (OSError, socket.timeout):
                 with self.lock:
                     self.clients.discard(client)
+                try:
+                    client.close()
+                except OSError:
+                    pass
 
     @property
     def count(self) -> int:

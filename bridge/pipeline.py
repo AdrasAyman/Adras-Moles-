@@ -3,8 +3,9 @@ Data Pipeline: streams sensor frames to the game over WebSocket, and records
 telemetry to CSV for engineering analysis (--log).
 
 Frames are pushed as soon as any box sends a packet (with a periodic refresh
-for health), because boxes now upstream at their own discretion rather than on
-a fixed slot schedule.
+for health), because boxes upstream at their own discretion rather than on a
+fixed slot schedule. The loop never dies on an error: a bad frame is logged
+once and skipped, so the game keeps receiving data.
 """
 
 from __future__ import annotations
@@ -15,7 +16,7 @@ import threading
 import time
 from typing import Any, TextIO
 
-from bridge.config import LAYOUTS, SOLVER
+from bridge.config import LAYOUTS, MAX_PLAYER_RANGE, SOLVER
 from bridge.hub import SensorHub
 from bridge.sectors import MedianRing, RangeGate, solve_sectors
 from bridge.websocket_server import WebSocketServer
@@ -49,25 +50,29 @@ def pump(
     last_seq: list[int] = []
     prev_fix: dict | None = None
 
+    errors = 0
     while not stop.is_set():
         hub.changed.wait(period)
         hub.changed.clear()
-        snap = hub.snapshot()
-        r = snap["ranges"]
-
-        frame_payload = {
-            "t": int((time.monotonic() - t0) * 1000),
-            "layout": snap["layout"],
-            "values_per_box": snap["values_per_box"],
-            "detected": snap["detected"],
-            "mixed": snap["mixed"],
-            "ranges": [None if v is None else round(v * 1000) for v in r],
-            "seq": snap["seq"],
-            "age_ms": snap["age_ms"],
-            "boxes": hub.health(),
-            "hub": {"frames": hub.frames, "bad": hub.bad, "switches": hub.switches},
-        }
-        ws.broadcast(json.dumps(frame_payload))
+        try:
+            snap = hub.snapshot()
+            r = snap["ranges"]
+            frame_payload = {
+                "t": int((time.monotonic() - t0) * 1000),
+                "layout": snap["layout"],
+                "values_per_box": snap["values_per_box"],
+                "ranges": [None if v is None else round(v * 1000) for v in r],
+                "seq": snap["seq"],
+                "age_ms": snap["age_ms"],
+                "boxes": hub.health(),
+                "hub": {"frames": hub.frames, "bad": hub.bad},
+            }
+            ws.broadcast(json.dumps(frame_payload))
+        except Exception as e:                      # never take the stream down
+            errors += 1
+            if errors <= 3:
+                print(f"\n  ! pump error: {type(e).__name__}: {e}")
+            continue
 
         if writer:
             now = time.monotonic()
@@ -88,7 +93,9 @@ def pump(
             if not fresh:
                 continue
             max_age = SOLVER["median_max_age_ms"] / 1000.0
-            med = [ring.value(now, max_age) for ring in rings]
+            # A reading beyond the play area is the room behind the player, not the player.
+            med = [None if (v := ring.value(now, max_age)) is not None and v > MAX_PLAYER_RANGE else v
+                   for ring in rings]
             sensors = LAYOUTS[layout]
             fix = solve_sectors(med, sensors, prev_fix)
             if fix["x"] is not None:

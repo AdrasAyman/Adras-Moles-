@@ -9,6 +9,8 @@ const Sim = {
   noise: 0.008,      // Range noise std dev in metres (8 mm)
   drop: 0.03,        // Missing echo probability (3%)
   spike: 0.0,        // Probability a reading is wild (a random range): jitter testing
+  background: 3.5,   // m — what a sensor reads when the player is NOT in its cone (the
+                     // wall/furniture behind the field), as real sensors do. 0 = no echo.
   timing: "regular", // "regular": every box at SOLVER.measureHz
                      // "irregular": box 1 ~every 100 ms with jitter, box 2 at
                      // random intervals (mean ~700 ms) — boxes that upstream
@@ -53,8 +55,13 @@ function simulateRanges(truth, sensors) {
     const half = (Sim.beamOverride != null ? Sim.beamOverride / 2 : beamHalf(s)) * Math.PI / 180;
 
     const surface = d - AREA.bodyR;
-    if (Math.abs(bearing - facing) > half) return null;                     // Outside beam
-    if (surface > BEAM.maxRange || surface < BEAM.minRange) return null;    // Range limits
+    const seesPlayer = Math.abs(bearing - facing) <= half && surface <= BEAM.maxRange && surface >= BEAM.minRange;
+    if (!seesPlayer) {
+      // The sensor looks past the player at the room. Real sensors return that
+      // distance, not "nothing".
+      if (!(Sim.background > 0) || Math.random() < Sim.drop) return null;
+      return Sim.background + gauss() * 0.05;
+    }
     if (Math.random() < Sim.drop) return null;                              // Packet drop
 
     if (Math.random() < Sim.spike) {

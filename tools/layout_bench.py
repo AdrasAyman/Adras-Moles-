@@ -26,7 +26,7 @@ from typing import Any, Sequence
 # Ensure workspace root is on sys.path so bridge can be imported
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from bridge.config import AREA_FAR, AREA_NEAR, AREA_W, BODY_R, LAYOUTS
+from bridge.config import AREA_FAR, AREA_NEAR, AREA_W, BODY_R, LAYOUTS, MAX_PLAYER_RANGE
 from bridge.sectors import solve_sectors
 from bridge.simulator import Walker
 from bridge.solver import solve as solve_legacy
@@ -68,7 +68,8 @@ def bench_layout(
             for _ in range(trials):
                 total += 1
                 mm = walker.ranges_mm(tx, ty)
-                r = [None if v is None else v / 1000.0 for v in mm]
+                # As the game does: beyond the play area the sensor sees the room, not the player.
+                r = [None if v is None or v / 1000.0 > MAX_PLAYER_RANGE else v / 1000.0 for v in mm]
                 nsens.append(sum(1 for v in r if v is not None))
 
                 lg = solve_legacy(r, sensors)

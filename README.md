@@ -170,32 +170,38 @@ one. Measured on the built layout this lifts the "cursor alive" rate from ~88% t
 Players walk, so anything implying faster movement is treated as a glitch. Three layers
 work together, and every setting lives in `SOLVER` in `game/js/config.js`:
 
-1. **Range gate** (`maxRangeRate` 2.0 m/s, `rangeGateTolM` 0.12 m). A sensor's new
-   reading is ignored if it's further from that sensor's last accepted reading than a
-   walker could move in the time since, plus a noise allowance. It never locks up: the
-   allowance grows with time, and if 3 ignored readings in a row agree with each other
-   (`rangeRejoinCount`), the player really did move and the reading is accepted. A "no
-   echo" is never gated. Ignored readings show up in the logs as *Reading ignored*.
+1. **Background rule** (`maxPlayerRangeM` 2.3 m). A reading beyond the play area is
+   the room behind the player: that sensor doesn't see anyone, so its reading is
+   treated as "no echo" and never reaches the solver. Without this, a sensor looking
+   past the player draws a 3.5 m circle and the position lands metres outside the
+   field. This is the single biggest accuracy fix for real hardware.
+1b. **Range gate** (`maxRangeRate`, off by default). Optionally ignores a reading that
+   is further from that sensor's last accepted reading than a walker could move in the
+   time since. Measured against the two layers above it changed nothing (10 vs 12 mm
+   standing, 155 vs 159 mm walking) while discarding ~15% of readings, so it is off;
+   the sensor test page's *Walking speed limit* slider turns it on for experiments.
 2. **Position gate** (`maxSpeed` 2.5 m/s). A solved position implying faster movement
    than this is rejected, re-acquiring after `gateTimeoutMs` so a real jump can't
    freeze the cursor.
-3. **Adaptive averaging** (`averageMs` 1000, `averageMinMs` 250). The cursor is the
-   time-weighted average position over the last second while the player stands
-   still, and the window shrinks to 250 ms as they walk (between `stillSpeed` 0.2 and
+3. **Adaptive averaging** (`averageMs` 600, `averageMinMs` 150). The cursor is the
+   time-weighted average position over the last 600 ms while the player stands
+   still, and the window shrinks to 150 ms as they walk (between `stillSpeed` 0.2 and
    `walkSpeed` 0.6 m/s). Standing on a mole is when steadiness matters; walking to
-   the next one is when lag matters. The game's sensor readouts are averaged over the
-   same second. Set `averageMs` to 0 to use the old alpha-beta filter instead.
+   the next one is when lag matters. Set `averageMs` to 0 for the alpha-beta filter.
 
-Measured on the sensor test page (simulator, 25 mm noise, 10% wild readings, averaged
-over three runs; *wobble* is RMS cursor movement while standing still, *trail* is how
-far the cursor lags a player walking at 0.6 m/s):
+Measured end to end — real bridge over UDP, packets in the `0: <cm>` format from two
+simulated 50° boxes reading the room (3.5 m) outside their cones, 30 mm range noise,
+8% no-echo, 6% stray echoes, the real sensor test page in live mode; error is the
+cursor against the true position:
 
-| Setup | Wobble, standing | Biggest jump, standing | Trail, walking |
+| Setting | Standing still | Slow walk (0.06 m/s) | Walking 0.4 m/s |
 |---|---|---|---|
-| Before (no gates, alpha filter) | 25 mm | 39 mm | 187 mm |
-| Range gate only | 21 mm | 34 mm | 204 mm |
-| Gates + fixed 1 s average | 13 mm | 5 mm | 485 mm |
-| **Gates + adaptive 1 s → 250 ms (default)** | 10 mm | 5 mm | 284 mm |
+| 1000/250 ms window, range gate on | 10 mm | 40 mm | 159 mm |
+| 1000/250 ms window, gate off | 12 mm | 39 mm | 155 mm |
+| **600/150 ms window, gate off (default)** | 15 mm | 27 mm | 117 mm |
+
+The walking figure is lag, not scatter: the cursor trails a moving player by roughly
+that distance and catches up when they stop.
 
 Try the settings live on the sensor test page: the *Wild readings*, *Walking speed
 limit* and *Averaging window* sliders, with *Cursor wobble* in the Solve panel.
@@ -305,43 +311,72 @@ fields are saved with the session.
 ## Network Protocol
 
 ### Inbound Range Datagrams (UDP Port 5000)
-Each sensor box sends a datagram **whenever it has a reading**. There is no required
-rate, and the two boxes don't need to match: one can send ten times a second while
-the other sends at random.
+The rig is **two boxes, one 50° ultrasonic sensor each**, in the two corners of the
+play area nearest the screen. Each box sends one line per reading, whenever it has
+one — no fixed rate, and the boxes don't need to agree with each other:
 
-**One value or two.** A box sends either:
-- **one** value, a reading already normalised on the box, treated as **one 50°
-  sensor** per box (layout `2box2s`, sensors `L` and `R`), or
-- **two** values, treated as **two 25° sensors** per box (layout `2box4s`, sensors
-  `A`, `B` and `X`, `Y`).
-
-The bridge detects which from the packets themselves, and the game and sensor test
-page switch to match. It takes three consecutive packets with the new count from
-every active box to switch, so one malformed packet can't flip the layout. If the two
-boxes disagree, the current layout is kept and the logs flag "mixed value counts".
-
-**Hold last value.** Each sensor's most recent reading is kept until that sensor
-sends a new one, so the game always computes with the last value it received. Values
-never expire unless you start the bridge with `--stale-ms N`. Each frame to the game
-carries a per-sensor update counter and value age, so a held value is never mistaken
-for a new reading. See the `Tracker` notes in `game/js/tracker.js`.
-
-**JSON** (box `0` = left, `1` = right; readings in millimetres; `null` or `<= 0` = no echo):
-```json
-{"box": 0, "ranges": [1420, 1655]}
-{"box": 0, "ranges": [1420]}
-{"box": 0, "range": 1420}
 ```
-Extra fields such as `"t"` or `"batt"` are ignored.
-
-**Plain text** (box `1` = left, `2` = right; readings in centimetres; `-1` = no echo):
-```
-Box:1,S1:142.0,S2:165.5
-Box:1,S1:142.0
+0: 142.5
+1: 98.0
 ```
 
-The bridge still broadcasts the slot sync beacon on `UDP :4211` (below). Firmware may
-use it to avoid cross-talk between boxes, but doesn't have to.
+`0` is the left box, `1` the right; the number is the distance to the nearest surface
+in **centimetres** (`--units mm` if the firmware sends millimetres). `-1` or `0` means
+no echo. Each sensor's last value is kept until that sensor sends again.
+
+**A far reading means "I don't see the player".** An ultrasonic sensor whose cone
+misses the player doesn't return nothing — it returns the wall or furniture behind
+them. The far corner of the play area is 2.07 m from a box, so any reading over
+**2.3 m** (`SOLVER.maxPlayerRangeM`, `MAX_PLAYER_RANGE`) is treated as "no player in
+this cone", is shown as *room* in the panels, and never reaches the solver. If the
+room behind the field is closer than 2.3 m, tell us — that limit has to sit between
+the far edge of the field and the nearest thing behind it.
+
+Older formats are still accepted: JSON `{"box": 0, "ranges": [1420]}` (millimetres; a
+two-value list from the earlier two-transducer firmware is collapsed to the nearer
+echo) and `Box:1,S1:142.0` (1-based box ids, centimetres).
+
+### Sending us a live test
+The bridge records **every raw packet** it receives to `logs/udp-<date>-<time>.log`
+next to the telemetry database. After a session on the real hardware, send that file
+(and `logs/molefield.db`): the whole run can then be replayed through the exact same
+code with its original timing —
+
+```bash
+python molefield.py --replay logs/udp-20260929-143000.log      # --replay-speed 4 to hurry
+```
+
+— and every problem seen on the day can be reproduced and fixed without the hardware.
+
+### What two corner sensors can see
+Each box only sees the player inside its 50° cone. The position is exact where the
+two cones overlap; where only one box sees the player, the solver falls back to that
+box's bearing and range, which is coarse (~15 cm). With the boxes **30 cm in front
+of the screen** (where the config currently puts them), the outer column of mole
+holes on every level is seen by one box only:
+
+```
+levels 3-5 hole grid, x across / depth from the screen
+ (0.24,0.82) left    (0.58,0.82) BOTH   (0.92,0.82) BOTH   (1.26,0.82) right
+ (0.24,1.30) right   (0.58,1.30) BOTH   (0.92,1.30) BOTH   (1.26,1.30) left
+ (0.24,1.78) right   (0.58,1.78) BOTH   (0.92,1.78) BOTH   (1.26,1.78) left
+```
+
+A left box needs this cone width to see every hole, depending on where it is mounted
+(x negative = outboard of the field, y negative = behind the screen plane):
+
+```
+ box at:      x=0.00   x=-0.25   x=-0.50
+ y=+0.30       58°       53°       47°     <- current position: 50° isn't enough
+ y= 0.00       49°       46°       42°     <- on the screen plane: every hole is in both cones
+ y=-0.30       42°       40°       38°
+```
+
+So: **mount the boxes on the screen plane (or 25 cm outboard of the field corners),
+then update `x`/`y` in `LAYOUTS["2box2s"]` (`game/js/config.js`, `bridge/config.py`) to
+where they really are.** The solver is only as good as those coordinates and the aim
+angle (`a`): measure them, don't estimate. The sensor test page's calibration sweep
+measures the aim and width for you.
 
 ### Setup Wizard
 The game's `LIVE` position source opens an in-page setup wizard: enter the

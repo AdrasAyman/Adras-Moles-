@@ -220,7 +220,6 @@ const Telemetry = (() => {
     S.blindSince = S.lowFpsSince = null;
     S.prevVeto = S.prevSplit = S.prevConflict = false;
     S.prevRejects = S.maxRejects = 0;
-    S.mixed = false;
     S.lastSensorT = [];
     S.rejSeen = [];
     S.alarm = false;
@@ -331,11 +330,6 @@ const Telemetry = (() => {
       });
     });
     if (Tracker.src === "live") {
-      // Held values never go stale any more; what can go wrong is the boxes
-      // disagreeing about how many values they send.
-      if (Tracker.mixed && !S.mixed) event("anomaly", "mixed_values", {
-        boxes: (Tracker.live.boxes || []).map(b => ({ box: b.box + 1, values: b.values })) });
-      S.mixed = Tracker.mixed;
       if (Tracker.wsState !== S.prevWs) {
         if (S.prevWs != null) event("system", "ws_state", { state: Tracker.wsState });
         S.prevWs = Tracker.wsState;
@@ -548,6 +542,16 @@ const Telemetry = (() => {
 
   /* ── Main loop ─────────────────────────────────────────────── */
   function frame() {
+    try {
+      frameBody();
+    } catch (e) {
+      if (!S.frameErrors) S.frameErrors = 0;
+      if (S.frameErrors++ < 5) console.error("telemetry:", e);
+    }
+    requestAnimationFrame(frame);
+  }
+
+  function frameBody() {
     const n = now();
     S.fpsFrames++;
     if (n - S.fpsT >= 1000) {
@@ -583,7 +587,6 @@ const Telemetry = (() => {
 
     if (n - S.lastFlush >= FLUSH_MS) flush();
     badge();
-    requestAnimationFrame(frame);
   }
 
   function init() {
@@ -597,6 +600,11 @@ const Telemetry = (() => {
         else S.events.push({ t: t(), category: "system", type: "recording_paused", data: {} });
       });
     }
+    // Uncaught errors anywhere on the page are part of the record.
+    window.addEventListener("error", e => {
+      limited("jserr", 1000, () => event("system", "js_error", {
+        where: "window", message: String(e.message || ""), file: String(e.filename || "").split("/").pop(), line: e.lineno || null }));
+    });
     document.addEventListener("visibilitychange", () => {
       event("system", document.visibilityState === "hidden" ? "tab_hidden" : "tab_visible", {});
       if (document.visibilityState === "hidden") flush();

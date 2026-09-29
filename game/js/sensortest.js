@@ -662,7 +662,7 @@ function updateSidebar() {
   sensors.forEach((sen, i) => {
     const raw = Tracker.rawRanges[i], med = Tracker.ranges[i];
     const st = ST.stats[i];
-    setText("sraw" + i, MM(raw));
+    setText("sraw" + i, Tracker.background[i] ? MM(raw) + " room" : MM(raw), Tracker.background[i] ? "warn" : "");
     setText("smed" + i, MM(med));
     const age = ages[i];
     setText("sage" + i, Tracker.src === "mouse" || age == null ? "—"
@@ -828,7 +828,23 @@ function applyFits() {
 let stLast = performance.now();
 let stW = 0, stH = 0;
 
+let stErrors = 0;
+
 function stLoop(now) {
+  // Never let one error stop the page: log it and carry on next frame.
+  try {
+    stLoopBody(now);
+  } catch (e) {
+    if (stErrors++ < 5) console.error("stLoop:", e);
+    if (typeof Telemetry !== "undefined" && stErrors <= 20) {
+      Telemetry.event("system", "js_error", { where: "stLoop", message: String(e && e.message || e), stack: String(e && e.stack || "").slice(0, 400) });
+    }
+    stLast = now;
+  }
+  requestAnimationFrame(stLoop);
+}
+
+function stLoopBody(now) {
   const dt = Math.min(0.05, (now - stLast) / 1000);
   stLast = now;
 
@@ -864,12 +880,11 @@ function stLoop(now) {
   drawField();
   drawHistograms();
   updateSidebar();
-  requestAnimationFrame(stLoop);
 }
 
 /** Layout buttons mirror Tracker.layout, which the bridge drives in live mode. */
 function syncLayoutControls() {
-  const key = Tracker.layout + "|" + Tracker.src + "|" + Tracker.mixed + "|" + (Tracker.live.boxes || []).length;
+  const key = Tracker.layout + "|" + Tracker.src + "|" + (Tracker.live.boxes || []).length;
   if (key === ST.layoutUiKey) return;
   ST.layoutUiKey = key;
   const live = Tracker.src === "live";
@@ -880,9 +895,8 @@ function syncLayoutControls() {
   const hint = document.getElementById("stLayHint");
   if (hint) {
     hint.textContent = !live ? LAYOUTS[Tracker.layout].hint
-      : !(Tracker.live.boxes || []).length ? "Live: the layout follows what the boxes send. Waiting for packets…"
-      : Tracker.mixed ? "Live: the two boxes are sending different numbers of values — check their firmware."
-      : `Live: detected ${Tracker.sensors.length === 2 ? "one value per box (2 × 50°)" : "two values per box (4 × 25°)"}.`;
+      : !(Tracker.live.boxes || []).length ? "Live: two boxes, one 50° sensor each. Waiting for packets…"
+      : "Live: two boxes, one 50° sensor each. A reading beyond 2.3 m is shown as \"room\" — that sensor does not see the player.";
   }
 }
 
@@ -971,6 +985,7 @@ function initSensorTest() {
   bind("#sBeam", "#vBeam", v => (Sim.beamOverride = v >= 10 ? v : null), v => (v >= 10 ? v + "° override" : "as configured"));
   bind("#sAlpha", "#vAlpha", v => (Tracker.alpha = v / 100), v => (v / 100).toFixed(2));
   bind("#sSpike", "#vSpike", v => (Sim.spike = v / 100), v => v + " %");
+  bind("#sBg", "#vBg", v => (Sim.background = v / 10), v => (v ? (v / 10).toFixed(1) + " m" : "no echo"));
   bind("#sRate", "#vRate", v => (SOLVER.maxRangeRate = v / 10), v => (v ? (v / 10).toFixed(1) + " m/s" : "off"));
   bind("#sAvg", "#vAvg", v => { SOLVER.averageMs = v; if (!v) Tracker.fixHist = []; },
        v => (v ? v + " ms" : "off (α filter)"));

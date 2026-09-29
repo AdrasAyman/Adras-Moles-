@@ -26,6 +26,7 @@ const ANOMALY_INFO = {
   sector_conflict: ["Sector conflict", "Which sensors fired is impossible under the current cone calibration."],
   jump: ["Position jump", "The raw fix moved more than 0.6 m between consecutive measurements."],
   gate_reject: ["Velocity gate", "Measurements implied faster than 4 m/s movement and were rejected by the tracker."],
+  js_error: ["Page error", "A JavaScript error on the page. The animation loops keep running through these now, but they point at bugs."],
   range_reject: ["Reading ignored", "A reading changed faster than a walking player could move (2 m/s plus 120 mm of noise allowance) and was dropped. \"ignored\" counts how many in that burst."],
   long_hold: ["Long hold", "A sensor went 2 s or more without sending a new reading, so the game kept computing with its last value."],
   held_mismatch: ["Held-value mismatch", "One solve combined readings taken 750 ms or more apart, so the fix mixes where the player was then with where they are now."],
@@ -319,9 +320,9 @@ function renderSession(sess, series, events) {
   }
   const sensors = S.sensors || [];
   if (sensors.length) {
-    sensorsGrid.appendChild(add(card("Echo rate by sensor",
-      sess.src === "mouse" ? "Share of samples in which each simulated sensor could see the pointer." : "Share of measurements in which each sensor returned an echo.",
-      el => Viz.hbars(el, { categories: sensors.map(s => sensorName(s.index)), values: sensors.map(s => s.echo_rate),
+    sensorsGrid.appendChild(add(card("Sees the player",
+      "Share of measurements in which each sensor's reading was inside the play area (≤ 2.3 m). Beyond that it was reading the room behind the player.",
+      el => Viz.hbars(el, { categories: sensors.map(s => sensorName(s.index)), values: sensors.map(s => s.player_rate != null ? s.player_rate : s.echo_rate),
         max: 1, format: Viz.pct, color: color("--series-1"), valueName: "echo rate", categoryName: "Sensor",
         extra: i => [{ name: "spikes", value: String(sensors[i].spikes) }, { name: "dropouts", value: String(sensors[i].dropouts) }] }))));
 
@@ -351,8 +352,8 @@ function renderSession(sess, series, events) {
       }, { wide: true, noPng: true });
     sensorsGrid.appendChild(add(multi));
     sensorsGrid.appendChild(tableCard("Sensor statistics", "Raw ranges in millimetres.",
-      ["Sensor", "Echo", "Min", "P5", "Median", "Mean", "P95", "Max", "Std dev", "Spikes", "Dropouts", "Longest dropout"],
-      sensors.map(s => [sensorName(s.index), Viz.pct(s.echo_rate), Viz.num(s.raw.min, 0), Viz.num(s.raw.p5, 0), Viz.num(s.raw.median, 0),
+      ["Sensor", "Echo", "Sees player", "Sees room", "Min", "P5", "Median", "Mean", "P95", "Max", "Std dev", "Spikes", "Dropouts", "Longest dropout"],
+      sensors.map(s => [sensorName(s.index), Viz.pct(s.echo_rate), Viz.pct(s.player_rate), Viz.pct(s.room_rate), Viz.num(s.raw.min, 0), Viz.num(s.raw.p5, 0), Viz.num(s.raw.median, 0),
         Viz.num(s.raw.mean, 0), Viz.num(s.raw.p95, 0), Viz.num(s.raw.max, 0), Viz.num(s.raw.std, 1), s.spikes, s.dropouts, fmtMs(s.longest_dropout_ms)]),
       { wide: true }));
     if (sensors.some(s => s.has_timing) && sess.src !== "mouse") {
