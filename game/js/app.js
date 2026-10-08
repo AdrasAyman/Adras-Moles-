@@ -357,7 +357,7 @@ function mainLoopBody(now) {
 
 /* ── Level select on the start overlay ─────────────────────── */
 let pickedLevel = 0;
-
+let booting = false;
 function buildLevelPicker() {
   const wrap = document.getElementById("lvPick");
   if (!wrap) return;
@@ -434,7 +434,11 @@ function initApp() {
       const wsField = $("#wsField");
       if (hint) hint.textContent = SRC_HINT[Tracker.src];
       if (wsField) wsField.hidden = Tracker.src !== "live";
-      if (Tracker.src === "live") Setup.open();
+      // if (Tracker.src === "live") Setup.open();
+      if (Tracker.src === "live") {
+  if (booting) Setup.connect();   // page load: just connect, keep the level picker
+  else Setup.open();              // user clicked LIVE: show the wizard
+}
     };
   });
 
@@ -497,10 +501,16 @@ function initApp() {
       wsUrlInput.value = url;
     }
 
+    // if (q.get("src") === "live") {
+    //   const b = document.querySelector('[data-src="live"]');
+    //   if (b) b.click();
+    // }
     if (q.get("src") === "live") {
-      const b = document.querySelector('[data-src="live"]');
-      if (b) b.click();
-    }
+  const b = document.querySelector('[data-src="live"]');
+  booting = true;
+  if (b) b.click();
+  booting = false;
+}
   })();
 
   const srcHint = $("#srcHint");
