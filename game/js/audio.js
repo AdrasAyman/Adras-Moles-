@@ -50,7 +50,12 @@ const Audio_ = {
       setTimeout(() => this.blip(f, 0.1, "triangle", 0.15), i * 55)
     );
   },
-
+  prof() {
+    this.blip(320, 0.18, "triangle", 0.2, 960);
+    [784, 1046].forEach((f, i) =>
+      setTimeout(() => this.blip(f, 0.14, "square", 0.13), 160 + i * 110)
+    );
+  },
   escaped() {
     this.blip(220, 0.12, "sine", 0.08, 150);
   },

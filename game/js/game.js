@@ -179,6 +179,7 @@ function spawn() {
   const roll = Math.random();
   if (L.bombs && roll < 0.16) kind = "bomb";
   else if (L.gold && roll < 0.28) kind = "gold";
+  if (kind === "mole" && Math.random() < 0.4) kind = "prof"; // Iain mole, all levels
 
   const m = {
     hole: h,
@@ -213,7 +214,7 @@ function hit(m) {
     });
     shake = 0.35;
   } else {
-    const base = m.kind === "gold" ? 30 : 10;
+    const base = m.kind === "prof" ? 50 : m.kind === "gold" ? 30 : 10;
     const pts = base * G.streak;
     G.score += pts;
     G.hitsThisLevel++;
@@ -221,7 +222,8 @@ function hit(m) {
     G.streak = Math.min(8, G.streak + 1);
     G.bestStreak = Math.max(G.bestStreak, G.streak);
 
-    if (m.kind === "gold") Audio_.gold();
+    if (m.kind === "prof") Audio_.prof();
+    else if (m.kind === "gold") Audio_.gold();
     else Audio_.whack();
 
     G.fx.push({
@@ -229,8 +231,8 @@ function hit(m) {
       x: m.hole.x,
       y: m.hole.y,
       t: 0,
-      col: m.kind === "gold" ? "#FFB020" : "#9BE86B",
-      text: "+" + pts
+      col: m.kind === "prof" ? "#7FD3FF" : m.kind === "gold" ? "#FFB020" : "#9BE86B",
+      text: m.kind === "prof" ? "+" + pts + " IAIN!" : "+" + pts
     });
   }
 

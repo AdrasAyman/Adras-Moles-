@@ -237,6 +237,7 @@ function drawStage(dt) {
         }
       }
     }
+    if (m.kind === "prof") drawProfMole(sctx, r);
     sctx.restore();
 
     // Dwell ring on targeted mole
@@ -343,4 +344,166 @@ function drawStage(dt) {
   }
 
   sctx.restore();
+}
+// ── Professor mole ("Iain") ──
+// Drawn at the mole's centre with radius r, in the same coordinate frame as the
+// normal mole. It paints over the whole mole body, so it can be called after the
+// normal mole has been drawn.
+function drawProfMole(c, r) {
+  const skin = "#E2A37F", skinShade = "#C98462";
+  const hair = "#B7B2AB", hairDark = "#8D8882";
+
+  // Body shape (same outline as the normal mole), filled with a navy shirt
+  c.fillStyle = "#2C3E5C";
+  c.beginPath();
+  c.ellipse(0, 0, r * 0.95, r * 1.05, 0, Math.PI, 0);
+  c.rect(-r * 0.95, 0, r * 1.9, r * 1.4);
+  c.fill();
+
+  // Ears
+  c.fillStyle = skinShade;
+  c.beginPath();
+  c.ellipse(-r * 0.86, -r * 0.22, r * 0.14, r * 0.2, 0, 0, 7);
+  c.ellipse(r * 0.86, -r * 0.22, r * 0.14, r * 0.2, 0, 0, 7);
+  c.fill();
+
+  // Head
+  c.fillStyle = skin;
+  c.beginPath();
+  c.ellipse(0, -r * 0.18, r * 0.82, r * 0.9, 0, 0, 7);
+  c.fill();
+
+  // White shirt collar
+  c.fillStyle = "#F4F1EA";
+  c.beginPath();
+  c.moveTo(-r * 0.5, r * 0.62);
+  c.lineTo(0, r * 0.95);
+  c.lineTo(-r * 0.12, r * 1.15);
+  c.lineTo(-r * 0.62, r * 0.82);
+  c.closePath();
+  c.moveTo(r * 0.5, r * 0.62);
+  c.lineTo(0, r * 0.95);
+  c.lineTo(r * 0.12, r * 1.15);
+  c.lineTo(r * 0.62, r * 0.82);
+  c.closePath();
+  c.fill();
+
+  // Short grey hair, slightly higher at the temples
+  c.save();
+  c.beginPath();
+  c.ellipse(0, -r * 0.18, r * 0.84, r * 0.92, 0, 0, 7);
+  c.clip();
+  c.fillStyle = hair;
+  c.beginPath();
+  c.moveTo(-r, -r * 0.2);
+  c.lineTo(-r * 0.78, -r * 0.42);
+  c.quadraticCurveTo(-r * 0.55, -r * 0.62, -r * 0.42, -r * 0.7);
+  c.quadraticCurveTo(0, -r * 0.6, r * 0.42, -r * 0.7);
+  c.quadraticCurveTo(r * 0.55, -r * 0.62, r * 0.78, -r * 0.42);
+  c.lineTo(r, -r * 0.2);
+  c.lineTo(r, -r * 1.3);
+  c.lineTo(-r, -r * 1.3);
+  c.closePath();
+  c.fill();
+  // salt-and-pepper texture
+  c.strokeStyle = hairDark;
+  c.lineWidth = Math.max(1, r * 0.04);
+  c.lineCap = "round";
+  for (let i = -3; i <= 3; i++) {
+    const x = i * r * 0.2;
+    c.beginPath();
+    c.moveTo(x - r * 0.04, -r * 0.82 - Math.abs(i) * r * 0.01);
+    c.lineTo(x + r * 0.05, -r * 0.98);
+    c.stroke();
+  }
+  c.restore();
+
+  // Eyebrows
+  c.strokeStyle = "#6F6A64";
+  c.lineWidth = Math.max(1.5, r * 0.07);
+  c.lineCap = "round";
+  c.beginPath();
+  c.moveTo(-r * 0.56, -r * 0.5);
+  c.quadraticCurveTo(-r * 0.36, -r * 0.6, -r * 0.14, -r * 0.5);
+  c.moveTo(r * 0.14, -r * 0.5);
+  c.quadraticCurveTo(r * 0.36, -r * 0.6, r * 0.56, -r * 0.5);
+  c.stroke();
+
+  // Happy, slightly squinting eyes
+  c.strokeStyle = "#2A1A10";
+  c.lineWidth = Math.max(1.5, r * 0.07);
+  c.beginPath();
+  c.arc(-r * 0.34, -r * 0.24, r * 0.1, Math.PI * 1.1, Math.PI * 1.9);
+  c.moveTo(r * 0.24, -r * 0.27);
+  c.arc(r * 0.34, -r * 0.24, r * 0.1, Math.PI * 1.1, Math.PI * 1.9);
+  c.stroke();
+
+  // Thick black rectangular glasses
+  const gw = r * 0.5, gh = r * 0.34, gy = -r * 0.42, rad = r * 0.08;
+  c.strokeStyle = "#111";
+  c.lineWidth = Math.max(2, r * 0.11);
+  c.lineJoin = "round";
+  for (const cx of [-r * 0.34, r * 0.34]) {
+    c.beginPath();
+    c.roundRect(cx - gw / 2, gy, gw, gh, rad);
+    c.stroke();
+  }
+  c.beginPath();
+  c.moveTo(-r * 0.09, gy + gh * 0.35);
+  c.lineTo(r * 0.09, gy + gh * 0.35);           // bridge
+  c.moveTo(-r * 0.59, gy + gh * 0.3);
+  c.lineTo(-r * 0.8, gy + gh * 0.2);            // arms
+  c.moveTo(r * 0.59, gy + gh * 0.3);
+  c.lineTo(r * 0.8, gy + gh * 0.2);
+  c.stroke();
+
+  // Mole nose, so he's still a mole
+  c.fillStyle = "#C9605A";
+  c.beginPath();
+  c.ellipse(0, r * 0.06, r * 0.12, r * 0.09, 0, 0, 7);
+  c.fill();
+
+  // Big toothy grin
+  c.fillStyle = "#5A1E1E";
+  c.beginPath();
+  c.moveTo(-r * 0.4, r * 0.24);
+  c.quadraticCurveTo(0, r * 0.3, r * 0.4, r * 0.24);
+  c.quadraticCurveTo(r * 0.32, r * 0.58, 0, r * 0.6);
+  c.quadraticCurveTo(-r * 0.32, r * 0.58, -r * 0.4, r * 0.24);
+  c.fill();
+  c.save();
+  c.clip();
+  c.fillStyle = "#FFFFFF";
+  c.fillRect(-r * 0.45, r * 0.2, r * 0.9, r * 0.17);
+  c.restore();
+
+  // Little pink mole paws resting on the hole edge
+  for (const sgn of [-1, 1]) {
+    const px = sgn * r * 0.6, py = r * 1.12;
+    c.fillStyle = "#E8A9A0";
+    c.beginPath();
+    c.ellipse(px, py, r * 0.26, r * 0.16, 0, 0, 7);
+    c.fill();
+    c.strokeStyle = "#F7EDE6";
+    c.lineWidth = Math.max(1, r * 0.05);
+    c.lineCap = "round";
+    for (const k of [-1, 0, 1]) {
+      c.beginPath();
+      c.moveTo(px + k * r * 0.11, py - r * 0.1);
+      c.lineTo(px + k * r * 0.13, py - r * 0.22);
+      c.stroke();
+    }
+  }
+
+  // Whiskers
+  c.strokeStyle = "rgba(60,30,20,.55)";
+  c.lineWidth = Math.max(1, r * 0.04);
+  for (const sgn of [-1, 1]) {
+    for (const dy of [-0.03, 0.06]) {
+      c.beginPath();
+      c.moveTo(sgn * r * 0.2, r * (0.08 + dy));
+      c.lineTo(sgn * r * 0.58, r * (0.02 + dy * 1.6));
+      c.stroke();
+    }
+  }
 }
