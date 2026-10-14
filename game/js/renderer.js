@@ -1135,7 +1135,7 @@ function drawScoreboardPanel(sctx, dt) {
   const px = rightX + (margin - pw) / 2;
   const cx = px + pw / 2;
   const py = Math.max(16, VIEW.y + 12);
-  const rows = 8;
+  const rows = Scores.MAX;
   const rh = 28;
   const ph = 132 + rows * rh + 24;
   const glow = beating || Scores.flash > 0;

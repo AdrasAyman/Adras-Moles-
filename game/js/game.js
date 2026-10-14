@@ -618,19 +618,27 @@ function hideAllOverlays() {
 const Scores = {
   KEY: "molefield.scores",
   NAME_KEY: "molefield.lastname",
-  MAX: 200,
+  KEEP_BETWEEN_RUNS: false,   // false: scores reset every time the game is launched (new tab).
+                              // true: scores are kept for good in this browser.
+  MAX: 5,              // how many scores the scoreboard keeps
   list: [],
   lastSaved: null,     // entry saved at the end of the most recent run
   flash: 0,            // seconds left of the "new high score" glow on the panel
 
+  store() {
+    // sessionStorage lives only as long as the tab: a fresh launch starts empty,
+    // but a page refresh keeps the scores.
+    try { return this.KEEP_BETWEEN_RUNS ? localStorage : sessionStorage; } catch (e) { return localStorage; }
+  },
   load() {
     try {
-      const a = JSON.parse(localStorage.getItem(this.KEY) || "[]");
+      const a = JSON.parse(this.store().getItem(this.KEY) || "[]");
       this.list = Array.isArray(a) ? a.filter(e => e && typeof e.score === "number") : [];
+      this.list = this.top(this.MAX);
     } catch (e) { this.list = []; }
   },
   persist() {
-    try { localStorage.setItem(this.KEY, JSON.stringify(this.list.slice(-this.MAX))); } catch (e) {}
+    try { this.store().setItem(this.KEY, JSON.stringify(this.list.slice(-this.MAX))); } catch (e) {}
   },
   best() { return this.list.reduce((m, e) => Math.max(m, e.score), 0); },
   top(n) {
@@ -649,6 +657,7 @@ const Scores = {
     };
     const wasHigh = entry.score > this.best();
     this.list.push(entry);
+    this.list = this.top(this.MAX);   // keep only the best MAX scores
     this.persist();
     this.lastSaved = entry;
     if (wasHigh) this.flash = 4;
