@@ -130,8 +130,8 @@ const LAYOUTS = {
       // 50° cone must point ~40° in to cover it. "Angled slightly in" from the
       // box's point of view is a large angle in these coordinates: measure it
       // with the calibration sweep on the sensor test page.
-      { n: "L", x: -0.15, y: 0.30, a:  40, w: 50, box: 1, slot: 1 },  // left box
-      { n: "R", x:  1.65, y: 0.30, a: -40, w: 50, box: 2, slot: 1 }   // right box
+      { n: "L", x: -0.15, y: 0.30, a:  40, w: 70, box: 1, slot: 1 },  // left box
+      { n: "R", x:  1.65, y: 0.30, a: -40, w: 70, box: 2, slot: 1 }   // right box
     ]
   },
   "4wide": {
@@ -178,7 +178,7 @@ const LEVELS = [
     dwell: 0.4,//0.50
     max: 1,
     target: 6,//6
-    dur: 50,
+    dur: 400,
     bombs: false,
     gold: false,
     desc: "Six holes, one mole at a time. Learn how the cursor answers your body."
