@@ -312,13 +312,31 @@ def solve_sectors(
         if not rs:
             info.append({"box": b, "sec": sec, "d": None, "spread": 0.0, "n": 0, "raw": []})
         else:
+            # --- MAJORITY RULES CLUSTERING (3+ Sensors) ---
+            rs_sorted = sorted(rs)
+            if len(rs_sorted) >= 3:
+                # If all 3 are tightly clustered, keep all of them
+                if rs_sorted[-1] - rs_sorted[0] <= SOLVER["pair_spread_warn"]:
+                    consensus = rs_sorted
+                else:
+                    # Otherwise, find the two that agree the most and discard the outlier
+                    min_diff = math.inf
+                    consensus = rs_sorted[:2]
+                    for i in range(len(rs_sorted) - 1):
+                        diff = rs_sorted[i+1] - rs_sorted[i]
+                        if diff < min_diff:
+                            min_diff = diff
+                            consensus = rs_sorted[i:i+2]
+            else:
+                consensus = rs_sorted
+
             info.append({
                 "box": b,
                 "sec": sec,
-                "d": sum(rs) / len(rs) + BODY_R,   # surface -> body centre
-                "spread": max(rs) - min(rs),       # co-located disagreement
-                "n": len(rs),
-                "raw": list(rs),
+                "d": sum(consensus) / len(consensus) + BODY_R, # surface -> body centre
+                "spread": max(consensus) - min(consensus),     # disagreement of the consensus pair
+                "n": len(rs),                                  # total echoes received
+                "raw": consensus,                              # hide outlier from hypothesis splitter
             })
 
     live = [o for o in info if o["d"] is not None]

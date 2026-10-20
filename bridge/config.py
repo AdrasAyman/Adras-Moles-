@@ -33,6 +33,15 @@ LAYOUTS: dict[str, list[tuple[float, float, float, float]]] = {
         (1.50, 0.30, -51.85, 25.0),   # X  right box, wall-side half
         (1.50, 0.30, -26.85, 25.0),   # Y  right box, forward half
     ],
+    # Two boxes upstreaming THREE values each: six 25 deg sensors total.
+    "2box6s": [
+        (-0.15, 0.30,  15.0, 25.0),   # L1  left box, wall-side
+        (-0.15, 0.30,  40.0, 25.0),   # L2  left box, center
+        (-0.15, 0.30,  65.0, 25.0),   # L3  left box, forward
+        ( 1.65, 0.30, -65.0, 25.0),   # R1  right box, forward
+        ( 1.65, 0.30, -40.0, 25.0),   # R2  right box, center
+        ( 1.65, 0.30, -15.0, 25.0),   # R3  right box, wall-side
+    ],
     # The rig: two boxes 1.8 m apart (15 cm outboard of each front corner), one
     # 70 deg reading each, angled slightly inward.
     "2box2s": [
@@ -55,6 +64,7 @@ LAYOUTS: dict[str, list[tuple[float, float, float, float]]] = {
 LAYOUT_NAMES: dict[str, list[str]] = {
     "4lin": ["0", "1", "2", "3"],
     "2box4s": ["A", "B", "X", "Y"],
+    "2box6s": ["L1", "L2", "L3", "R1", "R2", "R3"],
     "2box2s": ["L", "R"],
     "2box": ["L", "R"],
     "4wide": ["0", "1", "2", "3"],
@@ -73,9 +83,9 @@ BEAM_MIN_RANGE: float = 0.04
 
 # Solver / filter tuning. Must mirror SOLVER in game/js/config.js.
 # The live rig: two boxes, one 50 deg sensor each, in the corners nearest the screen.
-LIVE_LAYOUT: str = "2box2s"
+LIVE_LAYOUT: str = "2box6s"
 # Kept so older recorded sessions (four 25 deg sensors) can still be analysed.
-VALUES_PER_BOX_LAYOUT: dict[int, str] = {1: "2box2s", 2: "2box4s"}
+VALUES_PER_BOX_LAYOUT: dict[int, str] = {1: "2box2s", 2: "2box4s", 3: "2box6s"}
 
 # A reading further than this (m, surface) cannot be the player: the play area
 # ends 2.0 m from the screen and the far corner is ~2.07 m from a box. It is the
