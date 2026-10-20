@@ -884,6 +884,61 @@ function mainLoopBody(now) {
   drawStage(dt);
   drawRadar();
   updateHUD();
+  updatePauseButton();
+}
+
+/* ── Pause / resume ────────────────────────────────────────────
+   Used by the P key, the on-screen PAUSE button and the Resume button.
+   Works during the GET READY countdown as well as during play. */
+function pauseGame() {
+  if (G.phase !== "play" && G.phase !== "count") return;
+  G.resumeTo = G.phase;
+  G.phase = "pause";
+  Audio_.alarmOff();
+  const dz = document.getElementById("dz");
+  if (dz) dz.classList.remove("on");
+  showOverlay("#ovPause");
+}
+
+function resumeGame() {
+  if (G.phase !== "pause") return;
+  G.phase = G.resumeTo || "play";
+  hideAllOverlays();
+}
+
+function togglePause() {
+  if (G.phase === "pause") resumeGame();
+  else pauseGame();
+}
+
+/* On-screen PAUSE button, built here so no HTML change is needed. It sits in
+   the bottom-left corner of the stage and only shows while a round runs. */
+function buildPauseButton() {
+  const stage = document.getElementById("stage");
+  if (!stage || !stage.parentElement || document.getElementById("btnPauseGame")) return;
+  const host = stage.parentElement;
+  try { if (getComputedStyle(host).position === "static") host.style.position = "relative"; } catch (e) {}
+
+  const b = document.createElement("button");
+  b.id = "btnPauseGame";
+  b.type = "button";
+  b.textContent = "❚❚ PAUSE";
+  b.title = "Pause the game (P)";
+  b.style.cssText =
+    "position:absolute;left:14px;bottom:14px;z-index:20;padding:10px 16px;" +
+    "border-radius:10px;border:1px solid rgba(255,255,255,.28);background:rgba(16,22,29,.9);" +
+    "color:#fff;font:700 14px 'Bahnschrift','DIN Alternate',sans-serif;letter-spacing:.06em;" +
+    "cursor:pointer;display:none;";
+  b.onclick = () => { pauseGame(); b.blur(); };
+  host.appendChild(b);
+}
+
+function updatePauseButton() {
+  const b = document.getElementById("btnPauseGame");
+  if (!b) return;
+  const show = G.phase === "play" || G.phase === "count";
+  const want = show ? "block" : "none";
+  if (b.style.display !== want) b.style.display = want;
 }
 
 /* ── Level select on the start overlay ─────────────────────── */
@@ -926,18 +981,7 @@ function initApp() {
   }
 
   window.addEventListener("keydown", e => {
-    if (e.key === "p" || e.key === "P") {
-      const dz = $("#dz");
-      if (G.phase === "play") {
-        G.phase = "pause";
-        Audio_.alarmOff();
-        if (dz) dz.classList.remove("on");
-        showOverlay("#ovPause");
-      } else if (G.phase === "pause") {
-        G.phase = "play";
-        hideAllOverlays();
-      }
-    }
+    if (e.key === "p" || e.key === "P") togglePause();
     if (e.key === "m" || e.key === "M") {
       Audio_.muted = !Audio_.muted;
       if (Audio_.muted) Audio_.alarmOff();
@@ -945,6 +989,7 @@ function initApp() {
   });
 
   buildLevelPicker();
+  buildPauseButton();
 
   const btnStart = $("#btnStart");
   const btnNext = $("#btnNext");
@@ -954,7 +999,7 @@ function initApp() {
   if (btnStart) btnStart.onclick = () => { Audio_.init(); hideAllOverlays(); resetRun(pickedLevel); };
   if (btnNext) btnNext.onclick = () => { hideAllOverlays(); startLevel(G.li + 1); };
   if (btnAgain) btnAgain.onclick = () => { hideAllOverlays(); resetRun(pickedLevel); };
-  if (btnResume) btnResume.onclick = () => { hideAllOverlays(); G.phase = "play"; };
+  if (btnResume) btnResume.onclick = () => resumeGame();
 
   document.querySelectorAll("[data-src]").forEach(b => {
     b.onclick = () => {
