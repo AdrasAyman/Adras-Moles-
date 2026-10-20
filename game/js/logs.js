@@ -5,7 +5,7 @@
    and trends across sessions. Data comes from /api/ (bridge/telemetry_api.py).
    ══════════════════════════════════════════════════════════════ */
 
-const L = {
+const T = {
   sessions: [], selected: null, view: "session",
   charts: [], poll: null, detail: null, eventFilter: "anomaly", eventLimit: 300
 };
