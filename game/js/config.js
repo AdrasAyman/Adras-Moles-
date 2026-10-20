@@ -373,15 +373,15 @@ const LAYOUTS = {
     ]
   },
   "2box2s": {
-    name: "2 BOXES · 2 SENSORS (50°)",
-    hint: "The rig: two boxes 1.8 m apart, 15 cm outboard of each corner nearest the screen, each sending one reading (\"0: <cm>\" / \"1: <cm>\") from a 50° sensor angled slightly inward. Both boxes see the player where the two cones overlap; elsewhere one box gives a coarse bearing-and-range fix. An out-of-range reading (the firmware's 8 m) keeps that sensor's last real value.",
+    name: "2 BOXES · 2 SENSORS (70°)",
+    hint: "The rig: two boxes 1.8 m apart, 15 cm outboard of each corner nearest the screen, each sending one reading (\"0: <cm>\" / \"1: <cm>\") covering 70°, angled slightly inward. Both boxes see the player where the two cones overlap; elsewhere one box gives a coarse bearing-and-range fix. An out-of-range reading (the firmware's 8 m) keeps that sensor's last real value.",
     s: [
       // From 15 cm outboard of a corner the field spans bearings ~5°-80°, so a
-      // 50° cone must point ~40° in to cover it. "Angled slightly in" from the
+      // 70° cone pointed ~40° in covers it. "Angled slightly in" from the
       // box's point of view is a large angle in these coordinates: measure it
       // with the calibration sweep on the sensor test page.
-      { n: "L", x: -0.15, y: 0.30, a:  40, w: 50, box: 1, slot: 1 },  // left box
-      { n: "R", x:  1.65, y: 0.30, a: -40, w: 50, box: 2, slot: 1 }   // right box
+      { n: "L", x: -0.15, y: 0.30, a:  40, w: 70, box: 1, slot: 1 },  // left box
+      { n: "R", x:  1.65, y: 0.30, a: -40, w: 70, box: 2, slot: 1 }   // right box
     ]
   },
   "4wide": {
@@ -428,7 +428,7 @@ const LEVELS = [
     dwell: 0.4,//0.50
     max: 1,
     target: 6,//6
-    dur: 50,
+    dur: 400,
     bombs: false,
     gold: false,
     freezeMoles: true,   // true: ice moles can appear on this level

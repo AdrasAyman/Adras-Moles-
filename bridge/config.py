@@ -34,10 +34,10 @@ LAYOUTS: dict[str, list[tuple[float, float, float, float]]] = {
         (1.50, 0.30, -26.85, 25.0),   # Y  right box, forward half
     ],
     # The rig: two boxes 1.8 m apart (15 cm outboard of each front corner), one
-    # 50 deg sensor each, angled slightly inward.
+    # 70 deg reading each, angled slightly inward.
     "2box2s": [
-        (-0.15, 0.30,  40.0, 50.0),   # L  left box (aim: measure on the test page)
-        ( 1.65, 0.30, -40.0, 50.0),   # R  right box
+        (-0.15, 0.30,  40.0, 70.0),   # L  left box (aim: measure on the test page)
+        ( 1.65, 0.30, -40.0, 70.0),   # R  right box
     ],
     "2box": [
         (0.10, 0.30, 14.0, 40.0),
@@ -105,7 +105,8 @@ DEFAULTS: dict[str, int | float] = {
     "units": "cm", # unit of a bare "<box>: <value>" datagram (JSON is always mm)
     "sync": 4211,
     "rate": 30.0,         # Frames per second pushed to the game UI over WS
-    "sync_hz": 15.6,      # Ping slot beacon cycles per second across all boxes
+    "sync_hz": 10.0,      # Ping slot beacon cycles per second across all boxes
+                          # (2 boxes x 3 sensors x 16 ms = 96 ms cycle, so <= 10.4)
     "stale_ms": 0,        # 0 = hold each sensor's last value indefinitely (boxes
                           # upstream at their own discretion); >0 expires values
     "alive_s": 10.0,      # A box silent this long is shown as offline
