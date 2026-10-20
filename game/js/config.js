@@ -431,7 +431,7 @@ const LEVELS = [
     dur: 50,
     bombs: false,
     gold: false,
-    freezeMoles: false,   // true: ice moles can appear on this level
+    freezeMoles: true,   // true: ice moles can appear on this level
     desc: "Six holes, one mole at a time. Learn how the cursor answers your body."
   },
   {

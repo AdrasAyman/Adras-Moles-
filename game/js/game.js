@@ -732,7 +732,7 @@
    ══════════════════════════════════════════════════════════════ */
 
 const FREEZE_SECONDS = 5.0;   // how long an ice mole freezes the moles
-const ICE_CHANCE = 0.55;      // chance a normal mole turns into an ice mole on levels with freezeMoles: true (about 1 mole in 10 overall)
+const ICE_CHANCE = 1.0;      // chance a normal mole turns into an ice mole on levels with freezeMoles: true (about 1 mole in 10 overall)
 
 const G = {
   phase: "start", // "start" | "count" | "play" | "levelup" | "over" | "pause"
@@ -912,7 +912,7 @@ function spawn() {
   const roll = Math.random();
   if (L.bombs && roll < 0.16) kind = "bomb";
   else if (L.gold && roll < 0.28) kind = "gold";
-  if (kind === "mole" && Math.random() < 0.4) kind = "prof"; // Iain mole, all levels
+  if (kind === "mole" && Math.random() < 0.3) kind = "prof"; // Iain mole, all levels
   // Ice mole: freezes every mole for FREEZE_SECONDS. Only on levels with
   // freezeMoles: true in config.js; never while a freeze is running, never two at once.
   if (kind === "mole" && L.freezeMoles && G.freeze <= 0 && !G.moles.some(o => o.kind === "ice" && !o.dead) &&
