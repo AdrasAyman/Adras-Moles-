@@ -1,243 +1,134 @@
-/* ───────────────────────────────────────────────────────────────────────────
-   MOLEFIELD Sensor Box Firmware — ESP32 + 2 × RCWL-1601
-   ENGG3000 SPINE · Full-Body Whack-a-Mole
-
-   Each box fires its ultrasonic sensors in a time slot synchronized by the PC,
-   then sends one UDP datagram per cycle:
-
-       {"box":0,"t":184213,"ranges":[1420,1655],"batt":5210}
-
-   Ranges are in millimetres to nearest surface (null where no echo returned).
-   Telemetry fields are extensible without breaking bridge compatibility.
-
-   RANGES ARE SENT RAW AND UNSMOOTHED. All filtering now happens downstream
-   (median-of-5 in the browser). See the note in pingSensor() before adding
-   any smoothing back into this file.
-
-   WHY PING SLOTS MATTER:
-   Four ultrasonic sensors aimed at the same person will cross-talk if fired
-   simultaneously. A receiver catching a neighbour's acoustic burst reports
-   a falsely short range, corrupting the position solution. Time-slotting
-   guarantees only one sensor emits ultrasound at a given moment:
-
-       beacon ──▶ │ box0 s0 │ box0 s1 │ box1 s0 │ box1 s1 │ ...idle... │
-                   0 ms      16 ms     32 ms     48 ms     64 ms = next beacon
-
-   WIRING (per sensor, 3.3V safe):
-       VCC  → 3V3 (or VIN depending on board regulator)
-       GND  → GND
-       TRIG → see TRIG_PINS below
-       ECHO → see ECHO_PINS below
-
-   CONFIGURATION:
-   Set BOX_ID to 0 on the first box and 1 on the second before flashing.
-   ─────────────────────────────────────────────────────────────────────────── */
-
 #include <WiFi.h>
 #include <WiFiUdp.h>
 
-/* ── Per-Box Configuration ──────────────────────────────────────────────── */
-#define BOX_ID            0            // 0 or 1 — MUST differ between physical boxes
+#define TRIG_PIN1 32
+#define ECHO_PIN1 35
+#define TRIG_PIN2 26
+#define TRIG_PIN3 23
+#define ECHO_PIN2 27
+#define ECHO_PIN3 22
+#define MAX_DIST_CM 800
 
-// Networking Mode:
-// true  = Standalone AP mode (Box 0 creates the WIFI_SSID network below,
-//         Box 1 and the PC join it)
-// false = External router mode (Both boxes connect to an existing Wi-Fi router)
-#define STANDALONE_AP     true
+#define BOX_ID 1  // Set to 0 for the AP (Box 0), or 1 for the station (Box 1)
 
-const char* WIFI_SSID   = "Molefield";
-const char* WIFI_PASS   = "molefield123";
+const char* WIFI_SSID = "Molefield";
+const char* WIFI_PASS = "molefield123";
 
-const uint16_t UDP_TX_PORT   = 4210;   // Outbound telemetry datagrams to PC bridge
-const uint16_t UDP_SYNC_PORT = 4211;   // Inbound slot sync beacon from PC bridge
-const bool     USE_BROADCAST = true;   // false -> send unicast to BRIDGE_IP
-IPAddress      BRIDGE_IP(192, 168, 4, 2);
+float tempC = 23.0;  // fallback temperature
 
-/* ── Hardware Pinout (HC-SR04 / RCWL-1601) ──────────────────────────────── */
-const uint8_t  N_SENSORS = 2;
-const uint8_t  TRIG_PINS[N_SENSORS] = { 32, 26 };  // Sensor 1: GPIO 32, Sensor 2: GPIO 26
-const uint8_t  ECHO_PINS[N_SENSORS] = { 35, 27 };  // Sensor 1: GPIO 35, Sensor 2: GPIO 27
+WiFiUDP udpTx;
+WiFiUDP udpSync;
+// Broadcast on the Molefield subnet. In AP_STA mode box 0 can send a
+// 255.255.255.255 broadcast out of its unconnected STA side instead of the AP,
+// so both boxes use the subnet broadcast, which goes out on the Molefield network.
+IPAddress host(192, 168, 4, 255);
+const uint16_t port = 5000;            // Port matching bridge/config.py DEFAULTS["udp"]
+const uint16_t sync_port = 4211;       // PC broadcasts sync beacon here
 
-/* ── Timing & Acoustic Constants ────────────────────────────────────────── */
-const uint16_t SLOT_MS         = 16;    // Time window allocated per sensor (ms)
-const uint32_t ECHO_TIMEOUT_US = 14000; // 2401 mm maximum, see pingSensor()
-const float    SPEED_OF_SOUND  = 0.343; // mm per microsecond at ~20 °C
-const long     RANGE_MIN_MM    = 40;    // Below this the sensor is not honest
-const long     RANGE_MAX_MM    = 2400;  // Matches ECHO_TIMEOUT_US above
-
-/* ── Battery Voltage Sensing ────────────────────────────────────────────── */
-const uint8_t  VBAT_PIN     = 34;       // ADC1 pin with resistor divider from battery +
-const float    VBAT_DIVIDER = 2.0;      // Equal resistor divider ratio
-const bool     VBAT_ENABLED = true;
-
-WiFiUDP udpTx, udpSync;
-char packet[256];
 uint16_t lastSeq = 0xFFFF;
+unsigned long lastCycleTime = 0;
 
-/* ── Ultrasonic Ping Measurement ────────────────────────────────────────── */
-long pingSensor(uint8_t i) {
-  digitalWrite(TRIG_PINS[i], LOW);
-  delayMicroseconds(3);
-  digitalWrite(TRIG_PINS[i], HIGH);
-  delayMicroseconds(10);
-  digitalWrite(TRIG_PINS[i], LOW);
-
-  uint32_t us = pulseIn(ECHO_PINS[i], HIGH, ECHO_TIMEOUT_US);
-  if (us == 0) return -1; // No acoustic return within maximum window
-
-  long mm = (long)(us * SPEED_OF_SOUND / 2.0f);
-
-  /* Physical sanity only. Note the real ceiling is set by ECHO_TIMEOUT_US, not
-     by an arbitrary constant: 14000 us of flight time is 2401 mm, so anything
-     beyond RANGE_MAX_MM cannot be reported by this timeout in the first place.
-     The furthest a body surface can sit from a corner box is ~2067 mm, leaving
-     roughly 14% headroom. Raising the timeout would need SLOT_MS and the sync
-     beacon rate raised with it (4 slots x 16 ms already fills the 64 ms cycle),
-     so leave the timing alone unless you re-plan the whole slot budget. */
-  if (mm < RANGE_MIN_MM || mm > RANGE_MAX_MM) return -1;
-
-  /* NO SMOOTHING HERE — DELIBERATELY.
-     This used to run a 30/70 exponential moving average, which cost ~180 ms of
-     lag (tau at the 15.6 Hz ping rate) and ~420 ms whenever the PC sync beacon
-     dropped and the box fell back to its 150 ms timer. That single line was
-     about 70% of the entire end-to-end latency budget.
-
-     Spikes are now removed by a median-of-5 in the browser (SOLVER.medianWindow
-     in game/js/config.js), which rejects a cross-talk outlier completely rather
-     than smearing 1/5th of it across the next five frames. A median needs real
-     samples to work with, so pass every physically plausible reading straight
-     through — including the ugly ones. Do not reintroduce a filter here. */
-  return mm;
-}
-
-uint16_t readBatteryMv() {
-  if (!VBAT_ENABLED) return 0;
-  uint32_t acc = 0;
-  for (uint8_t k = 0; k < 8; k++) acc += analogReadMilliVolts(VBAT_PIN);
-  return (uint16_t)((acc / 8) * VBAT_DIVIDER);
-}
-
-/* ── Slotted Measurement & Transmission Cycle ───────────────────────────── */
-void runCycle() {
-  const uint32_t slotStart = millis();
-  const uint16_t myOffset  = BOX_ID * N_SENSORS * SLOT_MS;
-
-  long mm[N_SENSORS];
-  for (uint8_t i = 0; i < N_SENSORS; i++) {
-    const uint32_t due = slotStart + myOffset + (uint32_t)i * SLOT_MS;
-    while ((int32_t)(millis() - due) < 0) {
-      // Hold until allocated time slot
-    }
-    mm[i] = pingSensor(i);
-  }
-
-  // Format JSON payload
-  int n = snprintf(packet, sizeof(packet), "{\"box\":%d,\"t\":%lu,\"ranges\":[",
-                   BOX_ID, (unsigned long)millis());
-  for (uint8_t i = 0; i < N_SENSORS; i++) {
-    if (mm[i] < 0) {
-      n += snprintf(packet + n, sizeof(packet) - n, "%snull", i ? "," : "");
-    } else {
-      n += snprintf(packet + n, sizeof(packet) - n, "%s%ld", i ? "," : "", mm[i]);
-    }
-  }
-  snprintf(packet + n, sizeof(packet) - n, "],\"batt\":%u}", readBatteryMv());
-
-  // Transmit over UDP
-  IPAddress dest = USE_BROADCAST ? IPAddress(255, 255, 255, 255) : BRIDGE_IP;
-  udpTx.beginPacket(dest, UDP_TX_PORT);
-  udpTx.print(packet);
-  udpTx.endPacket();
-
-  // Also broadcast to SoftAP subnet in standalone mode
-#if STANDALONE_AP
-  udpTx.beginPacket(IPAddress(192, 168, 4, 255), UDP_TX_PORT);
-  udpTx.print(packet);
-  udpTx.endPacket();
-#endif
-
-  // Periodic Serial debug output matching electrical team's format
-  static unsigned long lastSerialPrint = 0;
-  if (millis() - lastSerialPrint >= 100) {
-    lastSerialPrint = millis();
-    long dist1_cm = (mm[0] > 0) ? mm[0] / 10 : -1;
-    long dist2_cm = (mm[1] > 0) ? mm[1] / 10 : -1;
-    
-    Serial.print("distance1: ");
-    Serial.print(dist1_cm);
-    Serial.print("\t");
-    Serial.print("distance2: ");
-    Serial.print(dist2_cm);
-    Serial.println(" cm");
-  }
-}
-
-/* ── Setup & Main Loop ──────────────────────────────────────────────────── */
 void setup() {
   Serial.begin(115200);
+  pinMode(TRIG_PIN1, OUTPUT);
+  pinMode(TRIG_PIN2, OUTPUT);
+  pinMode(TRIG_PIN3, OUTPUT);
+  pinMode(ECHO_PIN1, INPUT);
+  pinMode(ECHO_PIN2, INPUT);
+  pinMode(ECHO_PIN3, INPUT);
+  digitalWrite(TRIG_PIN1, LOW);
+  digitalWrite(TRIG_PIN2, LOW);
+  digitalWrite(TRIG_PIN3, LOW);
 
-  for (uint8_t i = 0; i < N_SENSORS; i++) {
-    pinMode(TRIG_PINS[i], OUTPUT);
-    pinMode(ECHO_PINS[i], INPUT);
-    digitalWrite(TRIG_PINS[i], LOW);
-  }
-  if (VBAT_ENABLED) {
-    analogSetPinAttenuation(VBAT_PIN, ADC_11db);
-  }
-
-#if STANDALONE_AP
-  #if BOX_ID == 0
-  // ── Box 0: Broadcasts the standalone Wi-Fi Access Point ──
+#if BOX_ID == 0
   WiFi.mode(WIFI_AP_STA);
   WiFi.softAP(WIFI_SSID, WIFI_PASS);
   Serial.printf("\n========================================\n");
   Serial.printf("Sensor Box 0 created Wi-Fi AP '%s'\n", WIFI_SSID);
-  Serial.printf("AP IP address: %s\n", WiFi.softAPIP().toString().c_str());
-  Serial.printf("Connect your Laptop to '%s' (Pass: '%s')\n", WIFI_SSID, WIFI_PASS);
-  Serial.printf("========================================\n");
-  #else
-  // ── Box 1: Connects to Box 0's Wi-Fi Access Point ──
+#else
   WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_PASS);
   Serial.printf("\nSensor Box %d connecting to AP '%s'...", BOX_ID, WIFI_SSID);
-  int attempts = 0;
   while (WiFi.status() != WL_CONNECTED) {
     delay(300);
     Serial.print(".");
-    attempts++;
-    if (attempts % 30 == 0) {
-      Serial.printf("\nStill trying to connect to '%s'...\n", WIFI_SSID);
-    }
   }
-  Serial.printf("\n========================================\n");
-  Serial.printf("Sensor Box %d connected to AP!\n", BOX_ID);
-  Serial.printf("Assigned IP: %s\n", WiFi.localIP().toString().c_str());
-  Serial.printf("========================================\n");
-  #endif
-#else
-  // ── External Router Mode: Both boxes join existing network ──
-  WiFi.mode(WIFI_STA);
-  WiFi.setSleep(true);               // Modem sleep between packet bursts
-  WiFi.setTxPower(WIFI_POWER_11dBm); // Sufficient across a room, conserves battery
-  WiFi.begin(WIFI_SSID, WIFI_PASS);
-
-  Serial.printf("Sensor box %d connecting to %s", BOX_ID, WIFI_SSID);
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(250);
-    Serial.print(".");
-  }
-  Serial.printf("\nSensor box %d ready at IP: %s\n", BOX_ID, WiFi.localIP().toString().c_str());
+  Serial.printf("\nSensor Box %d connected to AP!\n", BOX_ID);
 #endif
 
-  udpTx.begin(0);
-  udpSync.begin(UDP_SYNC_PORT);
+  udpTx.begin(port);
+  udpSync.begin(sync_port);  // Start listening for the PC's sync beacon!
 }
 
-unsigned long lastCycleTime = 0;
-const unsigned long FALLBACK_CYCLE_MS = 150; // Fallback timer if PC sync beacon is lost
+const int TRIG_PINS[3] = { TRIG_PIN1, TRIG_PIN2, TRIG_PIN3 };
+const int ECHO_PINS[3] = { ECHO_PIN1, ECHO_PIN2, ECHO_PIN3 };
+
+// Fires all three sensors at once and times their echo pulses side by side
+// (pulseIn can only watch one pin at a time). MAX_DIST_CM where no echo.
+void pingAllCm(float out[3], float temp) {
+  float sos = 331.4 + 0.606 * temp;  // speed of sound m/s
+  long timeout_us = (long)((MAX_DIST_CM * 2.0 / 100.0 / sos) * 1e6) + 1000;
+
+  for (int i = 0; i < 3; i++) digitalWrite(TRIG_PINS[i], LOW);
+  delayMicroseconds(4);
+  for (int i = 0; i < 3; i++) digitalWrite(TRIG_PINS[i], HIGH);
+  delayMicroseconds(10);
+  for (int i = 0; i < 3; i++) digitalWrite(TRIG_PINS[i], LOW);
+
+  uint32_t rise[3] = { 0, 0, 0 }, dur[3] = { 0, 0, 0 };
+  uint8_t rising = 0, done = 0;  // bit i set = sensor i's pulse started / ended
+  const uint32_t start = micros();
+  while (done != 0b111 && micros() - start < (uint32_t)timeout_us) {
+    for (int i = 0; i < 3; i++) {
+      if (done & (1 << i)) continue;
+      bool high = digitalRead(ECHO_PINS[i]);
+      if (high && !(rising & (1 << i))) {
+        rise[i] = micros();
+        rising |= 1 << i;
+      } else if (!high && (rising & (1 << i))) {
+        dur[i] = micros() - rise[i];
+        done |= 1 << i;
+      }
+    }
+  }
+
+  for (int i = 0; i < 3; i++) {
+    out[i] = (done & (1 << i)) ? (dur[i] * sos) / (2.0 * 10000.0) : MAX_DIST_CM;
+  }
+}
+
+void runCycle() {
+  // Each box gets one 48 ms slot (the echo timeout is ~47.5 ms), so the two
+  // boxes never ping at the same time. Box 0 at 0 ms, box 1 at 48 ms.
+  const uint32_t slotStart = millis();
+  const uint16_t myOffset = BOX_ID * 48;
+
+  while ((int32_t)(millis() - (slotStart + myOffset)) < 0) {}
+  float dist[3];
+  pingAllCm(dist, tempC);
+
+  // Nearest of the three sensors (MAX_DIST_CM when none of them got an echo)
+  float nearest = min(dist[0], min(dist[1], dist[2]));
+
+  // Send only box id and value, e.g. "1: 142.5" (cm)
+  char payload[32];
+  snprintf(payload, sizeof(payload), "%d: %.1f", BOX_ID, nearest);
+
+  // One send per cycle, so the bridge doesn't count box 0 twice
+  udpTx.beginPacket(host, port);
+  udpTx.print(payload);
+  udpTx.endPacket();
+
+  // Minimal Serial debug so it doesn't block the strict timing
+  static unsigned long lastSerialPrint = 0;
+  if (millis() - lastSerialPrint >= 100) {
+    lastSerialPrint = millis();
+    Serial.println(payload);
+  }
+}
 
 void loop() {
-  // Check for PC synchronization beacon
+  // 1. Check for PC synchronization beacon (broadcast on port 4211)
   int sz = udpSync.parsePacket();
   if (sz > 0) {
     char buf[64];
@@ -250,15 +141,15 @@ void loop() {
         if (seq != lastSeq) {
           lastSeq = seq;
           lastCycleTime = millis();
-          runCycle();
+          runCycle();  // Run the ping sequence synced with the PC!
           return;
         }
       }
     }
   }
 
-  // Fallback: If no sync beacon arrives from PC within 65ms, ping autonomously
-  if (millis() - lastCycleTime >= FALLBACK_CYCLE_MS) {
+  // 2. Fallback: If no sync beacon arrives from PC within 150ms, ping autonomously anyway
+  if (millis() - lastCycleTime >= 150) {
     lastCycleTime = millis();
     runCycle();
   }
