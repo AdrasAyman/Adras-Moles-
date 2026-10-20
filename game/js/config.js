@@ -174,7 +174,7 @@ const LEVELS = [
     name: "Warm up",
     cols: 3,
     rows: 3, //2
-    life: 5.0,//2.6
+    life: 7.0,//2.6
     dwell: 0.4,//0.50
     max: 1,
     target: 6,//6
@@ -188,10 +188,10 @@ const LEVELS = [
     name: "Faster moles",
     cols: 3,
     rows: 3,
-    life: 4.5,
-    dwell: 0.35,
+    life: 7.5,
+    dwell: 0.40,
     max: 2,
-    target: 8,
+    target: 5,
     dur: 45,
     bombs: true,
     gold: true,
@@ -202,10 +202,10 @@ const LEVELS = [
     name: "Wider field",
     cols: 4,
     rows: 3,
-    life: 4.0,
-    dwell: 0.30,
+    life: 7.0,
+    dwell: 0.40,
     max: 2,
-    target: 10,
+    target: 5,
     dur: 40,
     bombs: true,
     gold: true,
@@ -216,10 +216,10 @@ const LEVELS = [
     name: "Twitch",
     cols: 4,
     rows: 3,
-    life: 3.0,
-    dwell: 0.3,
+    life: 7.0,
+    dwell: 0.40,
     max: 3,
-    target: 12,
+    target: 5,
     dur: 35,
     bombs: true,
     gold: true,
@@ -230,15 +230,15 @@ const LEVELS = [
     name: "Endurance",
     cols: 4,
     rows: 3,
-    life: 2.50,
-    dwell: 0.3,
+    life: 7.50,
+    dwell: 0.40,
     max: 3,
-    target: 14,
+    target: 5,
     dur: 30,
     bombs: true,
     gold: true,
     randomHoles: true,
-    desc: "Fifteen holes, one minute, no mercy. This is the run you demo in week 13."
+    desc: "Fifteen holes, one minute, no mercy."
   }
 ];
 
