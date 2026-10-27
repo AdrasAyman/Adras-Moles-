@@ -9,7 +9,7 @@
 #define ECHO_PIN3 22
 #define MAX_DIST_CM 800
 
-#define BOX_ID 1  // Set to 0 for the AP (Box 0), or 1 for the station (Box 1)
+#define BOX_ID 0  // Set to 0 for the AP (Box 0), or 1 for the station (Box 1)
 
 const char* WIFI_SSID = "Molefield";
 const char* WIFI_PASS = "molefield123";
@@ -42,11 +42,13 @@ void setup() {
 
 #if BOX_ID == 0
   WiFi.mode(WIFI_AP_STA);
+  WiFi.setSleep(false);  // no power-save delay on the sync beacon
   WiFi.softAP(WIFI_SSID, WIFI_PASS);
   Serial.printf("\n========================================\n");
   Serial.printf("Sensor Box 0 created Wi-Fi AP '%s'\n", WIFI_SSID);
 #else
   WiFi.mode(WIFI_STA);
+  WiFi.setSleep(false);  // no power-save delay on the sync beacon
   WiFi.begin(WIFI_SSID, WIFI_PASS);
   Serial.printf("\nSensor Box %d connecting to AP '%s'...", BOX_ID, WIFI_SSID);
   while (WiFi.status() != WL_CONNECTED) {
@@ -63,49 +65,41 @@ void setup() {
 const int TRIG_PINS[3] = { TRIG_PIN1, TRIG_PIN2, TRIG_PIN3 };
 const int ECHO_PINS[3] = { ECHO_PIN1, ECHO_PIN2, ECHO_PIN3 };
 
-// Fires all three sensors at once and times their echo pulses side by side
-// (pulseIn can only watch one pin at a time). MAX_DIST_CM where no echo.
-void pingAllCm(float out[3], float temp) {
+// Sensors fire one at a time, box by box, inside each 100 ms beacon cycle:
+//   b0 s1 | b0 s2 | b0 s3 | guard | b1 s1 | b1 s2 | b1 s3 | guard
+//   0       15      30      45      50      65      80      95   100 ms
+// The guards absorb the Wi-Fi timing difference between the two boxes.
+const uint32_t ECHO_TIMEOUT_US = 14000;  // ~2.4 m; the bridge drops > 2.3 m anyway
+const uint16_t SENSOR_GAP_MS = 15;       // timeout + 1 ms between sensors on a box
+const uint16_t BOX_SLOT_MS = 50;         // box 1 starts here, after a 5 ms guard
+const float MIN_DIST_CM = 4.0;           // closer than this is a stray echo, not a body
+
+// One sensor; MAX_DIST_CM where there was no (believable) echo.
+float pingCm(int trigPin, int echoPin, float temp) {
   float sos = 331.4 + 0.606 * temp;  // speed of sound m/s
-  long timeout_us = (long)((MAX_DIST_CM * 2.0 / 100.0 / sos) * 1e6) + 1000;
 
-  for (int i = 0; i < 3; i++) digitalWrite(TRIG_PINS[i], LOW);
+  digitalWrite(trigPin, LOW);
   delayMicroseconds(4);
-  for (int i = 0; i < 3; i++) digitalWrite(TRIG_PINS[i], HIGH);
+  digitalWrite(trigPin, HIGH);
   delayMicroseconds(10);
-  for (int i = 0; i < 3; i++) digitalWrite(TRIG_PINS[i], LOW);
+  digitalWrite(trigPin, LOW);
 
-  uint32_t rise[3] = { 0, 0, 0 }, dur[3] = { 0, 0, 0 };
-  uint8_t rising = 0, done = 0;  // bit i set = sensor i's pulse started / ended
-  const uint32_t start = micros();
-  while (done != 0b111 && micros() - start < (uint32_t)timeout_us) {
-    for (int i = 0; i < 3; i++) {
-      if (done & (1 << i)) continue;
-      bool high = digitalRead(ECHO_PINS[i]);
-      if (high && !(rising & (1 << i))) {
-        rise[i] = micros();
-        rising |= 1 << i;
-      } else if (!high && (rising & (1 << i))) {
-        dur[i] = micros() - rise[i];
-        done |= 1 << i;
-      }
-    }
-  }
+  long dur = pulseIn(echoPin, HIGH, ECHO_TIMEOUT_US);
+  if (dur == 0) return MAX_DIST_CM;
 
-  for (int i = 0; i < 3; i++) {
-    out[i] = (done & (1 << i)) ? (dur[i] * sos) / (2.0 * 10000.0) : MAX_DIST_CM;
-  }
+  float cm = (dur * sos) / (2.0 * 10000.0);
+  return cm < MIN_DIST_CM ? MAX_DIST_CM : cm;
 }
 
 void runCycle() {
-  // Each box gets one 48 ms slot (the echo timeout is ~47.5 ms), so the two
-  // boxes never ping at the same time. Box 0 at 0 ms, box 1 at 48 ms.
   const uint32_t slotStart = millis();
-  const uint16_t myOffset = BOX_ID * 48;
+  const uint32_t myStart = slotStart + BOX_ID * BOX_SLOT_MS;
 
-  while ((int32_t)(millis() - (slotStart + myOffset)) < 0) {}
   float dist[3];
-  pingAllCm(dist, tempC);
+  for (int i = 0; i < 3; i++) {
+    while ((int32_t)(millis() - (myStart + i * SENSOR_GAP_MS)) < 0) {}
+    dist[i] = pingCm(TRIG_PINS[i], ECHO_PINS[i], tempC);
+  }
 
   // Nearest of the three sensors (MAX_DIST_CM when none of them got an echo)
   float nearest = min(dist[0], min(dist[1], dist[2]));
