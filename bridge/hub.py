@@ -32,6 +32,7 @@ class SensorHub:
         self.changed = threading.Event()        # set on every accepted packet
         self.frames = 0
         self.bad = 0
+        self.nosync = 0          # status packets from boxes that lost the beacon
         self.boxes: dict[int, dict] = {}        # health bookkeeping
         self.ranges: list[float | None] = [None] * N_BOXES
         self.seq: list[int] = [0] * N_BOXES
@@ -90,6 +91,28 @@ class SensorHub:
         self.changed.set()
         return True
 
+    def note_control(self, kind: str, box: int, sender: str = "") -> bool:
+        """
+        Record a status packet from a box (see parse_control). "nosync" means the
+        box is not hearing the PC's sync beacon, so it is free-running: its sensors
+        are no longer slotted against the other box's and can cross-talk.
+        Returns True the first time a box reports it (so callers log it once).
+        """
+        now = time.monotonic()
+        b = self.normalise_box(int(box), False)
+        if b is None:
+            self.bad += 1
+            return False
+        with self.lock:
+            h = self.boxes.setdefault(b, dict(count=0, last=0.0, hz=0.0, _t0=now, _c0=0,
+                                             addr=sender, values=1))
+            first = not h.get("nosync")
+            h["nosync"] = h.get("nosync", 0) + 1
+            h["nosync_t"] = now
+            h["addr"] = sender or h["addr"]
+        self.nosync += 1
+        return first and kind == "nosync"
+
     def snapshot(self) -> dict:
         """Current frame: held ranges (m), per-sensor update counters and ages."""
         now = time.monotonic()
@@ -117,6 +140,9 @@ class SensorHub:
         now = time.monotonic()
         return [
             {"box": b, "alive": v["alive"], "hz": round(v["hz"], 1), "addr": v["addr"],
-             "values": v["values"], "age_ms": round((now - v["last"]) * 1000.0)}
+             "values": v["values"], "age_ms": round((now - v["last"]) * 1000.0),
+             "nosync": v.get("nosync", 0),
+             # True while the box is still reporting that it lost the beacon
+             "nosync_now": bool(v.get("nosync")) and (now - v.get("nosync_t", 0)) < 3.0}
             for b, v in self.live_boxes()
         ]

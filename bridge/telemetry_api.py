@@ -38,6 +38,15 @@ _SESSION = re.compile(r"^/api/sessions/(\d+)(?:/([a-z]+(?:\.(?:csv|json))?))?/?$
 
 
 def _send(h: BaseHTTPRequestHandler, code: int, body: bytes, ctype: str, filename: str | None = None) -> None:
+    try:
+        _send_unsafe(h, code, body, ctype, filename)
+    except (BrokenPipeError, ConnectionResetError):
+        # The page navigated away or was closed before we finished replying.
+        # Perfectly normal; nothing to report and nothing to recover.
+        pass
+
+
+def _send_unsafe(h: BaseHTTPRequestHandler, code: int, body: bytes, ctype: str, filename: str | None = None) -> None:
     h.send_response(code)
     h.send_header("Content-Type", ctype)
     h.send_header("Content-Length", str(len(body)))
@@ -131,6 +140,8 @@ class TelemetryAPI:
             _json(h, 404, {"error": "no such session"})
         except (ValueError, json.JSONDecodeError) as e:
             _json(h, 400, {"error": str(e)[:200]})
+        except (BrokenPipeError, ConnectionResetError):
+            pass                 # client went away mid-request
         except Exception as e:  # never take the game server down
             _json(h, 500, {"error": type(e).__name__})
         return True

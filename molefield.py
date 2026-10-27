@@ -151,7 +151,7 @@ def main():
         print(f"  Raw packet capture: {cap_path}")
         threading.Thread(
             target=udp_listener,
-            args=(hub, args.udp, stop_event, print, args.units, capture_file),
+            args=(hub, args.udp, stop_event, print, args.units, capture_file, args.sync),
             daemon=True,
             name="udp",
         ).start()

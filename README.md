@@ -69,10 +69,10 @@ Test the entire pipeline with a synthetic walking body:
 ```bash
 python molefield.py --simulate
 ```
-Simulate the newer upstream styles too:
+The simulator matches the live rig: one 70° reading per box, 8 m when nothing is
+found. To exercise boxes that report at their own pace:
 ```bash
-python molefield.py --simulate --sim-values 1                       # one 50° reading per box
-python molefield.py --simulate --sim-values 2 --sim-timing irregular # box 1 ~10 Hz, box 2 at random
+python molefield.py --simulate --sim-timing irregular   # box 1 ~10 Hz, box 2 at random
 ```
 
 ### 2. Live Hardware Mode (Standalone ESP32 Access Point)
@@ -126,17 +126,19 @@ Which sensors in a box fired, and which stayed silent, constrains the bearing to
 angular sector. How much that tells you depends on what the box upstreams:
 
 ```
-   Two values per box (4 × 25°), left box:
+   The live rig: one value per box, left box
+   L      :  5° … 75°   (70° wide)
+
+   The older firmware: two values per box (4 × 25°), left box
    A only : 14.4° … 39.4°   (25° wide)
    B only : 39.4° … 64.4°   (25° wide)
-
-   One value per box (2 × 50°), left box:
-   L      : 14.4° … 64.4°   (50° wide)
 ```
 
-Both setups cover the same 50° per box, so a two-box fix is equally accurate either
-way. The narrower sectors only matter when one box is blind, where they tighten the
-one-box fallback. Cones that overlap would add a third, narrow sector per box.
+On the live rig a box sends one value for its whole 70° field, so the sector is the
+whole cone and the bearing it gives is coarse. That costs nothing in practice: at 70°
+both cones cover every mole hole, so the position comes from the two ranges crossing
+and the sector is only ever used to pick between the two crossing points and to catch
+a mis-calibrated aim. Narrower sub-sectors would only help if one box went blind.
 Fired sensors intersect their cones; silent sensors carve theirs out.
 
 ### 3. Closed-form intersection
@@ -192,9 +194,9 @@ work together, and every setting lives in `SOLVER` in `game/js/config.js`:
    the next one is when lag matters. Set `averageMs` to 0 for the alpha-beta filter.
 
 Measured end to end — real bridge over UDP, packets in the `0: <cm>` format from two
-simulated 50° boxes reading the room (3.5 m) outside their cones, 30 mm range noise,
-8% no-echo, 6% stray echoes, the real sensor test page in live mode; error is the
-cursor against the true position:
+simulated 50° boxes (the rig at the time) reading the room outside their cones, 30 mm
+range noise, 8% no-echo, 6% stray echoes, the real sensor test page in live mode;
+error is the cursor against the true position:
 
 | Setting | Standing still | Slow walk (0.06 m/s) | Walking 0.4 m/s |
 |---|---|---|---|
@@ -286,6 +288,7 @@ simulated mode. That is what makes the "error against ground truth" numbers poss
 | Sector conflict | The set of firing sensors is impossible under the cone calibration |
 | Position jump | The raw fix moves more than 0.6 m between measurements |
 | Velocity gate | The tracker rejects movement faster than 4 m/s |
+| Box lost the sync beacon | A box reported `nosync`: it is free-running and can cross-talk with the other box |
 | Reading ignored | A reading changes faster than a walking player could move (range gate) |
 | Long hold | A sensor goes 2 s or more without sending a new reading |
 | Held-value mismatch | One solve combines readings taken 750 ms or more apart |
@@ -313,29 +316,46 @@ fields are saved with the session.
 ## Network Protocol
 
 ### Inbound Range Datagrams (UDP Port 5000)
-The rig is **two boxes, one 50° ultrasonic sensor each**, in the two corners of the
-play area nearest the screen. Each box sends one line per reading, whenever it has
-one — no fixed rate, and the boxes don't need to agree with each other:
+The rig is **two boxes in the corners nearest the screen, 1.8 m apart**. Each box
+holds **three ultrasonic transducers covering 70° between them**, fires them one at a
+time, and broadcasts **the nearest of the three as a single reading**:
 
 ```
 0: 142.5
 1: 98.0
 ```
 
-`0` is the left box, `1` the right; the number is the distance to the nearest surface
-in **centimetres** (`--units mm` if the firmware sends millimetres). `-1` or `0` means
-no echo. Each sensor's last value is kept until that sensor sends again.
+`0` is the left box, `1` the right; the number is centimetres to the nearest surface
+(`--units mm` if the firmware ever sends millimetres). Each box's last value is kept
+until that box sends again.
 
-**Out of range keeps the last real value.** The firmware streams **8 m** when it
-finds nothing — typically the player standing at the very edge of a cone. Any reading
-over 2.3 m (`SOLVER.maxPlayerRangeM`, the far corner of the field is 2.07 m away) is
-treated as inconclusive: the sensor keeps its last real reading (shown as *edge* /
-*held*) so the cursor stays put instead of dropping. `holdOutOfRangeMs` limits how long
-(0 = until a real reading arrives).
+Because a box sends **one** value, the solver models it as **one 70° sensor**, and the
+live layout is `2box2s` — two readings, 70° each. The six transducers are *not*
+reported separately, so a six-sensor layout would make the solver expect six readings
+and fail on every frame. `2box6s` exists only as a drawing of the hardware for the
+report (the **RIG SENSORS** button on the sensor test page).
+
+**Out of range keeps the last real value.** The firmware returns `MAX_DIST_CM` (8 m)
+when none of the three transducers got a believable echo — typically the player at the
+very edge of the cone, or closer than 4 cm. Any reading over 2.3 m
+(`SOLVER.maxPlayerRangeM`; the far corner of the field is 2.07 m away) is treated as
+inconclusive: the box keeps its last real reading (shown as *edge* / *held*) so the
+cursor stays put instead of dropping.
+
+**`nosync: <box>`** arrives on the same port when a box has not seen the bridge's sync
+beacon for 450 ms. It is a status packet, not a reading: the bridge counts it, flags
+that box in the setup wizard and the terminal status line, and records a *Box lost the
+sync beacon* anomaly in the session log. It matters because a free-running box is no
+longer slotted against the other one, so the two can hear each other's pings.
+
+**Timing.** The firmware's cycle is `box 0 → 3 sensors → guard → box 1 → 3 sensors`,
+about 95 ms, so the bridge's sync beacon runs at **10 Hz** (`sync_hz`). A faster beacon
+would start box 0's next round while box 1 is still listening — exactly the cross-talk
+the slots exist to prevent.
 
 Older formats are still accepted: JSON `{"box": 0, "ranges": [1420]}` (millimetres; a
-two-value list from the earlier two-transducer firmware is collapsed to the nearer
-echo) and `Box:1,S1:142.0` (1-based box ids, centimetres).
+multi-value list is collapsed to the nearest echo) and `Box:1,S1:142.0` (1-based box
+ids, centimetres).
 
 ### Sending us a live test
 The bridge records **every raw packet** it receives to `logs/udp-<date>-<time>.log`
@@ -349,35 +369,29 @@ python molefield.py --replay logs/udp-20260929-143000.log      # --replay-speed 
 
 — and every problem seen on the day can be reproduced and fixed without the hardware.
 
-### What two corner sensors can see
-Each box only sees the player inside its 50° cone. The position is exact where the
-two cones overlap; where only one box sees the player, the solver falls back to that
-box's bearing and range, which is coarse (~15 cm). With the boxes **30 cm in front
-of the screen** (where the config currently puts them), the outer column of mole
-holes on every level is seen by one box only:
+### What the two boxes can see
+Each box sees the player inside its 70° cone; the fix is exact where the two cones
+overlap. From 15 cm outboard of each front corner the field spans bearings of about
+5°–80°, so a 70° cone aimed 40° inward covers 5°–75°:
 
-```
-levels 3-5 hole grid, x across / depth from the screen
- (0.24,0.82) left    (0.58,0.82) BOTH   (0.92,0.82) BOTH   (1.26,0.82) right
- (0.24,1.30) right   (0.58,1.30) BOTH   (0.92,1.30) BOTH   (1.26,1.30) left
- (0.24,1.78) right   (0.58,1.78) BOTH   (0.92,1.78) BOTH   (1.26,1.78) left
-```
+| Cone per box | Both boxes see | One box only | Neither |
+|---|---|---|---|
+| 50° (old rig) | 61% | 36% | 2.5% |
+| **70° (now)** | **96%** | 4% | 0% |
 
-A left box needs this cone width to see every hole, depending on where it is mounted
-(x negative = outboard of the field, y negative = behind the screen plane):
+More importantly, **every mole hole on every level is now inside both cones**, so every
+fix during play is a two-box fix. On the 50° rig the outer column of holes was
+single-sensor and only coarsely located — that limitation is gone.
 
-```
- box at:      x=0.00   x=-0.25   x=-0.50
- y=+0.30       58°       53°       47°     <- current position: 50° isn't enough
- y= 0.00       49°       46°       42°     <- on the screen plane: every hole is in both cones
- y=-0.30       42°       40°       38°
-```
+Measured end to end against the real bridge, with fake boxes emitting exactly what the
+firmware sends (three sub-cones, nearest-of-three, 8 m sentinel, 10 Hz) and the real
+pages in Firefox: **100% two-box fixes**, cursor error ~12 mm standing still, ~55 mm
+walking slowly, ~175 mm while moving at 0.4 m/s (that last figure is lag, not scatter).
 
-So: **mount the boxes on the screen plane (or 25 cm outboard of the field corners),
-then update `x`/`y` in `LAYOUTS["2box2s"]` (`game/js/config.js`, `bridge/config.py`) to
-where they really are.** The solver is only as good as those coordinates and the aim
-angle (`a`): measure them, don't estimate. The sensor test page's calibration sweep
-measures the aim and width for you.
+The box coordinates and aim in `LAYOUTS["2box2s"]` (`game/js/config.js`,
+`bridge/config.py`) are the intended mounting, not measurements. The solver is only as
+good as they are — the calibration sweep on the sensor test page measures the real aim
+and width in a couple of minutes.
 
 ### Setup Wizard
 The game's `LIVE` position source opens an in-page setup wizard: enter the

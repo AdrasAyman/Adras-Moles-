@@ -22,7 +22,7 @@ class Walker:
         noise: float = 0.008,
         drop: float = 0.03,
         beam: float | None = None,
-        background: float = 3.5,
+        background: float = 8.0,
     ):
         """
         `beam` overrides every sensor's FULL cone width, in degrees — the same
@@ -35,8 +35,8 @@ class Walker:
         self.noise = noise
         self.drop = drop
         self.beam_override = None if beam is None else math.radians(beam / 2.0)
-        # What a sensor reads when the player is outside its cone: the room behind
-        # the field, as real ultrasonic sensors do. 0 = no echo (the old assumption).
+        # What a box reports when none of its three transducers got a believable
+        # echo: the firmware's MAX_DIST_CM, i.e. 8 m. 0 = send no echo instead.
         self.background = background
         self.t = 0.0
 

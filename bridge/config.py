@@ -33,7 +33,10 @@ LAYOUTS: dict[str, list[tuple[float, float, float, float]]] = {
         (1.50, 0.30, -51.85, 25.0),   # X  right box, wall-side half
         (1.50, 0.30, -26.85, 25.0),   # Y  right box, forward half
     ],
-    # Two boxes upstreaming THREE values each: six 25 deg sensors total.
+    # The PHYSICAL arrangement inside each box: three transducers tiled to cover
+    # 70 deg. The firmware does NOT broadcast these separately - it sends the
+    # nearest of the three as one value - so this is documentation and a drawing
+    # for the test page, never the live layout. Solve against "2box2s".
     "2box6s": [
         (-0.15, 0.30,  15.0, 25.0),   # L1  left box, wall-side
         (-0.15, 0.30,  40.0, 25.0),   # L2  left box, center
@@ -42,8 +45,9 @@ LAYOUTS: dict[str, list[tuple[float, float, float, float]]] = {
         ( 1.65, 0.30, -40.0, 25.0),   # R2  right box, center
         ( 1.65, 0.30, -15.0, 25.0),   # R3  right box, wall-side
     ],
-    # The rig: two boxes 1.8 m apart (15 cm outboard of each front corner), one
-    # 70 deg reading each, angled slightly inward.
+    # THE LIVE RIG: two boxes 1.8 m apart (15 cm outboard of each front corner).
+    # Each box reports the nearest of its three transducers, so the solver models
+    # it as one 70 deg sensor per box.
     "2box2s": [
         (-0.15, 0.30,  40.0, 70.0),   # L  left box (aim: measure on the test page)
         ( 1.65, 0.30, -40.0, 70.0),   # R  right box
@@ -82,10 +86,16 @@ BEAM_MAX_RANGE: float = 2.40   # Hard ceiling from ECHO_TIMEOUT_US in firmware
 BEAM_MIN_RANGE: float = 0.04
 
 # Solver / filter tuning. Must mirror SOLVER in game/js/config.js.
-# The live rig: two boxes, one 50 deg sensor each, in the corners nearest the screen.
-LIVE_LAYOUT: str = "2box6s"
+#
+# The live rig: two boxes in the corners nearest the screen. Each box holds THREE
+# transducers covering 70 deg between them, but broadcasts only the NEAREST of the
+# three as a single "<box>: <cm>" reading. So the solver sees one 70 deg sensor per
+# box - two readings in total - and "2box2s" is the live layout. (Setting this to
+# the six-sensor arrangement makes the solver expect six readings and fail on every
+# frame, because the hub only ever produces one per box.)
+LIVE_LAYOUT: str = "2box2s"
 # Kept so older recorded sessions (four 25 deg sensors) can still be analysed.
-VALUES_PER_BOX_LAYOUT: dict[int, str] = {1: "2box2s", 2: "2box4s", 3: "2box6s"}
+VALUES_PER_BOX_LAYOUT: dict[int, str] = {1: "2box2s", 2: "2box4s"}
 
 # A reading further than this (m, surface) cannot be the player: the play area
 # ends 2.0 m from the screen and the far corner is ~2.07 m from a box. It is the

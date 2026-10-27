@@ -55,6 +55,7 @@ const Telemetry = (() => {
     prevWs: null, boxAlive: {}, badPackets: null,
     // game state
     moleId: 0, moles: new Map(), phase: null, alarm: false, alarmSince: 0,
+    boxNosync: {},
     // bench state
     captureActive: false, truthKey: ""
   };
@@ -221,6 +222,7 @@ const Telemetry = (() => {
     S.prevVeto = S.prevSplit = S.prevConflict = false;
     S.prevRejects = S.maxRejects = 0;
     S.lastSensorT = [];
+    S.boxNosync = {};
     S.rejSeen = [];
     S.alarm = false;
     S.moles.clear();
@@ -335,6 +337,14 @@ const Telemetry = (() => {
         S.prevWs = Tracker.wsState;
       }
       for (const b of Tracker.live.boxes || []) {
+        // A box that lost the sync beacon is free-running, so the two boxes'
+        // sensors are no longer slotted apart and can hear each other.
+        const hadNosync = S.boxNosync[b.box] || 0;
+        if ((b.nosync || 0) > hadNosync) {
+          S.boxNosync[b.box] = b.nosync;
+          limited("nosync" + b.box, 5000, () => event("anomaly", "nosync", {
+            box: b.box + 1, addr: b.addr, total: b.nosync }));
+        }
         const was = S.boxAlive[b.box];
         if (was !== undefined && was !== b.alive) {
           event(b.alive ? "system" : "anomaly", b.alive ? "box_up" : "box_down",

@@ -16,7 +16,22 @@ from bridge.hub import SensorHub
 from bridge.simulator import Walker
 
 
+_CONTROL = re.compile(r"^\s*(nosync)\s*[:=]\s*(\d+)\s*$", re.I)
 _BOXVAL = re.compile(r"^\s*(?:box\s*)?(\d+)\s*[:=]\s*(-?\d+(?:\.\d+)?|nan|null|none)\s*$", re.I)
+
+
+def parse_control(text: str) -> tuple[str, int] | None:
+    """
+    Decode a firmware status packet into (kind, box). These arrive on the same
+    UDP port as the readings and carry no distance:
+
+        nosync: 0     this box has not seen the PC's sync beacon, so it is
+                      free-running and its sensors may cross-talk with the other box
+
+    Returns None for anything that is not a status packet.
+    """
+    m = _CONTROL.match(text.strip())
+    return (m.group(1).lower(), int(m.group(2))) if m else None
 
 
 def parse_datagram(text: str, units: str = "cm") -> tuple[int, list, bool | None] | None:
@@ -82,6 +97,7 @@ def udp_listener(
     log: Callable[[str], None] = print,
     units: str = "cm",
     capture: TextIO | None = None,
+    sync_port: int = 4211,
 ):
     """
     Listens for sensor packets from the ESP32 boxes (see parse_datagram).
@@ -97,6 +113,7 @@ def udp_listener(
     log(f"  listening for sensor boxes on UDP :{port} (bare values in {units})")
     t0 = time.monotonic()
     unparsed_logged = 0
+    nosync_logged = 0
 
     while not stop.is_set():
         try:
@@ -112,6 +129,15 @@ def udp_listener(
                 capture.write(f"{time.monotonic() - t0:.4f}\t{addr[0]}\t{text.strip()}\n")
             except OSError:
                 pass
+        control = parse_control(text)
+        if control is not None:
+            kind, box = control
+            if hub.note_control(kind, box, addr[0]) and nosync_logged < 3:
+                nosync_logged += 1
+                log(f"\n  ! box {box} is not receiving the sync beacon on UDP :{sync_port} "
+                    f"- it is free-running, so its sensors can cross-talk with the other box")
+            continue
+
         parsed = parse_datagram(text, units)
         if parsed is None:
             hub.bad += 1
@@ -145,6 +171,10 @@ def replay_thread(hub: SensorHub, path: str, units: str, stop: threading.Event, 
         wait = ts / speed - (time.monotonic() - t0)
         if wait > 0:
             stop.wait(wait)
+        control = parse_control(text)
+        if control is not None:
+            hub.note_control(control[0], control[1], addr)
+            continue
         parsed = parse_datagram(text, units)
         if parsed is None:
             hub.bad += 1

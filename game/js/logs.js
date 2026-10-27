@@ -26,6 +26,7 @@ const ANOMALY_INFO = {
   sector_conflict: ["Sector conflict", "Which sensors fired is impossible under the current cone calibration."],
   jump: ["Position jump", "The raw fix moved more than 0.6 m between consecutive measurements."],
   gate_reject: ["Velocity gate", "Measurements implied faster than 4 m/s movement and were rejected by the tracker."],
+  nosync: ["Box lost the sync beacon", "A sensor box reported it is not receiving the bridge's sync beacon, so it is free-running. Its three sensors are no longer slotted against the other box's and the two can hear each other (cross-talk), which shows up as readings that are too short."],
   js_error: ["Page error", "A JavaScript error on the page. The animation loops keep running through these now, but they point at bugs."],
   range_reject: ["Reading ignored", "A reading changed faster than a walking player could move (2 m/s plus 120 mm of noise allowance) and was dropped. \"ignored\" counts how many in that burst."],
   long_hold: ["Long hold", "A sensor went 2 s or more without sending a new reading, so the game kept computing with its last value."],

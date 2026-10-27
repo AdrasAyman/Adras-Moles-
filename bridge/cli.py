@@ -26,16 +26,23 @@ def status_loop(
     """
     time.sleep(1.0)
     held: dict[int, float] = {}
+    errors = 0
     while not stop.is_set():
+      try:
         snap = hub.snapshot()
         r = snap["ranges"]
         n = sum(1 for v in r if v is not None)
-        # Out of range means "nothing found": keep the last real value, as the game does.
+        # Out of range means "nothing found": keep the last real value, as the game
+        # does. A box can report out of range before it has ever sent a real one
+        # (nobody in its cone yet), so there may be nothing held: that is None.
+        solve_in = []
         for i, v in enumerate(r):
             if v is not None and v <= MAX_PLAYER_RANGE:
                 held[i] = v
-        fix = solve_sectors([held[i] if (v is not None and v > MAX_PLAYER_RANGE) else v for i, v in enumerate(r)],
-                            LAYOUTS[snap["layout"]])
+                solve_in.append(v)
+            else:
+                solve_in.append(held.get(i) if v is not None else None)
+        fix = solve_sectors(solve_in, LAYOUTS[snap["layout"]])
 
         names = LAYOUT_NAMES.get(snap["layout"], [str(i) for i in range(len(r))])
         cells = " ".join(
@@ -52,9 +59,10 @@ def status_loop(
                 f"{tag} x={fix['x']:.2f} y={fix['y']:.2f} "
                 f"+-{fix['sigma'] * 1000.0:3.0f}mm{flag}"
             )
-        mode = "2x50deg"
+        mode = f"{len(r)}x{LAYOUTS[snap['layout']][0][3]:.0f}deg"
         boxes = " ".join(
             f"box{b + 1}:{v['hz']:4.1f}Hz{'' if v['alive'] else ' OFF'}"
+            f"{' NOSYNC' if v.get('nosync_now') else ''}"
             for b, v in hub.live_boxes()
         ) or "no boxes reporting"
 
@@ -63,7 +71,11 @@ def status_loop(
             f"games:{ws.count}   "
         )
         sys.stdout.flush()
-        time.sleep(0.25)
+      except Exception as e:                   # the status line must never die
+        errors += 1
+        if errors <= 3:
+            print(f"\n  ! status line: {type(e).__name__}: {e}")
+      time.sleep(0.25)
 
 
 def build_arg_parser() -> argparse.ArgumentParser:

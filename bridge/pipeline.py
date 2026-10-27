@@ -66,7 +66,7 @@ def pump(
                 "seq": snap["seq"],
                 "age_ms": snap["age_ms"],
                 "boxes": hub.health(),
-                "hub": {"frames": hub.frames, "bad": hub.bad},
+                "hub": {"frames": hub.frames, "bad": hub.bad, "nosync": hub.nosync},
             }
             ws.broadcast(json.dumps(frame_payload))
         except Exception as e:                      # never take the stream down

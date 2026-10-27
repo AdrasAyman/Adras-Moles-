@@ -91,7 +91,8 @@
           <div class="field" style="margin-top:0.5rem">
             <label>Layout</label>
             <div class="seg" role="group">
-              <button data-lay="2box2s" aria-pressed="true">2 SENSORS · 50°</button>
+              <button data-lay="2box2s" aria-pressed="true">RIG · 2 × 70°</button>
+              <button data-lay="2box6s" aria-pressed="false">RIG SENSORS (3/box)</button>
               <button data-lay="2box4s" aria-pressed="false">OLD 4 × 25°</button>
               <button data-lay="4wide" aria-pressed="false">4 SPLAYED</button>
             </div>
@@ -138,9 +139,11 @@
           <h2>Boolean sectors</h2>
           <div id="sectorList"></div>
           <p class="hint" style="margin-top:0.4rem">
-            Which sensors fired, and the bearing wedge that implies. With two 25°
-            sensors per box, which one fired narrows the box's 50° field to half;
-            with one 50° sensor per box, the wedge is the whole cone.
+            Which sensors fired, and the bearing wedge that implies. On the live rig each
+            box sends one value for its whole 70° field, so the wedge is the whole cone.
+            (<b>RIG SENSORS</b> draws the three transducers inside each box, for the
+            report — the firmware does not send them separately, so it is a picture of the
+            hardware, not how the live fix is solved.)
           </p>
         </div>
 
@@ -231,7 +234,7 @@
           </div>
           <p class="hint">
             Leave the beam at "as configured" to sense with each sensor's own width
-            (25° or 50°). Drag it to sense with a different width while the solver still
+            (70° on the rig). Drag it to sense with a different width while the solver still
             assumes the configured one — the mis-calibration test.
           </p>
           <p class="hint" style="margin-top:0.4rem">

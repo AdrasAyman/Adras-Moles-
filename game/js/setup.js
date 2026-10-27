@@ -20,7 +20,7 @@ const Setup = {
   boxRowHtml(b) {
     const rate = b.alive ? `${b.hz.toFixed(1)} Hz` : "—";
     const age = b.age_ms < 1000 ? `${b.age_ms} ms ago` : `${(b.age_ms / 1000).toFixed(1)} s ago`;
-    const sends = b.values === 1 ? "1 value (50°)" : b.values === 2 ? "2 values (25° each)" : "—";
+    const sends = b.values === 1 ? "1 value (3 sensors, 70°)" : b.values === 2 ? "2 values (25° each)" : "—";
     return `<tr>
       <td><span class="dot ${b.alive ? "ok" : "bad"}"></span></td>
       <td>Box ${b.box + 1}</td>
@@ -53,9 +53,14 @@ const Setup = {
     if (mode) {
       const boxes = Tracker.live.boxes || [];
       const bg = boxes.filter(b => Tracker.background[b.box]).map(b => "box " + (b.box + 1));
+      // A box that lost the beacon is free-running: its sensors are no longer
+      // slotted against the other box's, so the two can hear each other.
+      const nosync = boxes.filter(b => b.nosync_now).map(b => "box " + (b.box + 1));
       mode.textContent = !boxes.length ? "waiting for packets"
-        : "2 sensors · one 50° reading per box" + (bg.length ? ` · ${bg.join(" & ")} out of range, holding last value` : "");
-      mode.style.color = bg.length ? "var(--amber)" : "";
+        : "2 boxes · 3 sensors each, one 70° reading per box"
+          + (nosync.length ? ` · ${nosync.join(" & ")} NOT receiving the sync beacon` : "")
+          + (bg.length ? ` · ${bg.join(" & ")} out of range, holding last value` : "");
+      mode.style.color = nosync.length ? "var(--alarm)" : bg.length ? "var(--amber)" : "";
     }
 
     const doneBtn = document.getElementById("btnSetupDone");

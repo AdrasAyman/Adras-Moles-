@@ -895,8 +895,8 @@ function syncLayoutControls() {
   const hint = document.getElementById("stLayHint");
   if (hint) {
     hint.textContent = !live ? LAYOUTS[Tracker.layout].hint
-      : !(Tracker.live.boxes || []).length ? "Live: two boxes, one 50° sensor each. Waiting for packets…"
-      : "Live: two boxes, one 50° sensor each. An out-of-range reading (8 m) keeps that sensor's last real value, shown as \"held\".";
+      : !(Tracker.live.boxes || []).length ? "Live: two boxes, three sensors each covering 70°. Waiting for packets…"
+      : "Live: two boxes, three sensors each; the box sends the nearest of its three, so this is one 70° reading per box. An out-of-range reading (8 m) keeps that box's last real value, shown as \"held\".";
   }
 }
 

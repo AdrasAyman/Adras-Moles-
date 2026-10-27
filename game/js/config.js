@@ -290,9 +290,9 @@ try {
    Bearing convention throughout the codebase is atan2(dx, dy):
    0deg points straight out from the wall, POSITIVE turns toward +x.
 
-   Widths follow the electrical design: 25° per sensor when a box
-   upstreams two values, 50° per box when it upstreams one normalised
-   value. Aims are reconstructed from the intended mounting rather
+   `w` is the width of what a box BROADCASTS, not of one transducer: the
+   live rig has three transducers per box covering 70° between them and
+   sends the nearest of the three, so the solver sees one 70° sensor. Aims are reconstructed from the intended mounting rather
    than measured off the built hardware. Run sensortest.html,
    capture a calibration sweep, and paste the fitted values back
    in here before trusting any of the sector logic.
@@ -372,14 +372,31 @@ const LAYOUTS = {
       { n: "Y", x: 1.50, y: 0.30, a: -26.85, w: 25, box: 2, slot: 2 }   // right box, forward half
     ]
   },
+  // The PHYSICAL arrangement inside each box: three transducers tiled to cover
+  // 70°. The firmware sends only the nearest of the three as ONE value, so this
+  // is a drawing of the hardware for the report — never the live solve layout.
+  "2box6s": {
+    name: "RIG SENSORS — 3 per box (picture only)",
+    hint: "What is actually inside each box: three transducers, each ~25° wide, aimed 25° apart so they tile the box's 70° field. The firmware reports only the nearest of the three, so the live fix is solved against the 2 × 70° layout — this view is for showing the hardware in the report.",
+    s: [
+      { n: "L1", x: -0.15, y: 0.30, a:  15, w: 25, box: 1, slot: 1 },
+      { n: "L2", x: -0.15, y: 0.30, a:  40, w: 25, box: 1, slot: 2 },
+      { n: "L3", x: -0.15, y: 0.30, a:  65, w: 25, box: 1, slot: 3 },
+      { n: "R1", x:  1.65, y: 0.30, a: -65, w: 25, box: 2, slot: 1 },
+      { n: "R2", x:  1.65, y: 0.30, a: -40, w: 25, box: 2, slot: 2 },
+      { n: "R3", x:  1.65, y: 0.30, a: -15, w: 25, box: 2, slot: 3 }
+    ]
+  },
   "2box2s": {
-    name: "2 BOXES · 2 SENSORS (70°)",
-    hint: "The rig: two boxes 1.8 m apart, 15 cm outboard of each corner nearest the screen, each sending one reading (\"0: <cm>\" / \"1: <cm>\") covering 70°, angled slightly inward. Both boxes see the player where the two cones overlap; elsewhere one box gives a coarse bearing-and-range fix. An out-of-range reading (the firmware's 8 m) keeps that sensor's last real value.",
+    name: "2 BOXES · 3 SENSORS EACH (70°)",
+    hint: "The rig: two boxes 1.8 m apart, 15 cm outboard of each corner nearest the screen. Each box holds THREE transducers covering 70° between them and broadcasts the nearest of the three as one reading (\"0: <cm>\" / \"1: <cm>\"), so the solver models each box as a single 70° sensor. At 70° both boxes see every mole hole, so every fix is a two-box fix. An out-of-range reading (the firmware's 8 m, sent when none of the three got an echo) keeps that box's last real value.",
     s: [
       // From 15 cm outboard of a corner the field spans bearings ~5°-80°, so a
-      // 70° cone pointed ~40° in covers it. "Angled slightly in" from the
-      // box's point of view is a large angle in these coordinates: measure it
-      // with the calibration sweep on the sensor test page.
+      // 70° cone pointed 40° in covers 5°-75°: both boxes then see 96% of the
+      // play area and every mole hole (at 50° it was 61% and the outer holes
+      // were single-box). "Angled slightly in" from the box's point of view is
+      // a large angle in these coordinates: confirm it with the calibration
+      // sweep on the sensor test page.
       { n: "L", x: -0.15, y: 0.30, a:  40, w: 70, box: 1, slot: 1 },  // left box
       { n: "R", x:  1.65, y: 0.30, a: -40, w: 70, box: 2, slot: 1 }   // right box
     ]
@@ -399,8 +416,8 @@ const LAYOUTS = {
 LAYOUTS["2box"] = LAYOUTS["2box4s"];
 
 /* ── Upstream formats ──────────────────────────────────────────
-   Each box upstreams either ONE value (normalised on the box, one 50°
-   sensor) or TWO values (two 25° sensors). The bridge detects which and
+   Each box upstreams ONE value (the nearest of its three transducers,
+   one 70° sensor to the solver); older firmware sent two. The bridge and
    tags every frame with the matching layout; these are the two layouts
    it can report. */
 const VALUES_PER_BOX_LAYOUT = { 1: "2box2s", 2: "2box4s" };
