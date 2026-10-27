@@ -1,1110 +1,3 @@
-// "use strict";
-// /* ══════════════════════════════════════════════════════════════
-//    MOLEFIELD — Application Controller & Loop
-//      BOX 1 (left)  → S0, S1
-//      BOX 2 (right) → S2, S3
-//    ══════════════════════════════════════════════════════════════ */
-
-// const $ = s => document.querySelector(s);
-// let lastTimestamp = performance.now();
-// let lastStageW = 0, lastStageH = 0;
-
-// function fitStageIfNeeded() {
-//   const stage = document.getElementById("stage");
-//   if (!stage || !stage.parentElement) return;
-//   const r = stage.parentElement.getBoundingClientRect();
-//   if (Math.abs(r.width - lastStageW) > 1 || Math.abs(r.height - lastStageH) > 1) {
-//     lastStageW = r.width;
-//     lastStageH = r.height;
-//     fitStage();
-//   }
-// }
-
-// function buildSensorRows() {
-//   const list = $("#sensorList");
-//   if (!list) return;
-//   list.innerHTML = boxesFor(Tracker.layout).map(b => {
-//     const rows = b.idx.map(i => {
-//       const sen = Tracker.sensors[i];
-//       return `
-//       <div class="sensrow" data-i="${i}">
-//         <span class="sdot"></span>
-//         <span class="slabel">${sen.n}<small>Box ${b.id} · ${sen.w}°</small></span>
-//         <span class="sbar"><i></i></span>
-//         <span class="sval">—</span>
-//       </div>`;
-//     }).join("");
-//     return `<div class="sgroup">${b.label} · ${b.side}</div>${rows}`;
-//   }).join("");
-// }
-
-// function buildLayoutPanel() {
-//   const wrap = $("#boxLayout");
-//   if (!wrap) return;
-//   wrap.innerHTML = boxesFor(Tracker.layout).map(b => {
-//     const rows = b.idx.map(i => {
-//       const sen = Tracker.sensors[i];
-//       return `
-//         <div class="boxrow" data-i="${i}">
-//           <span class="bslot">${sen.n}</span>
-//           <span class="bval">—</span>
-//         </div>`;
-//     }).join("");
-//     return `
-//       <div class="boxcard" data-box="${b.id}">
-//         <div class="boxhead">
-//           <span class="bdot"></span>
-//           <span class="bname">${b.label}</span>
-//           <span class="bside">${b.side}</span>
-//         </div>
-//         ${rows}
-//       </div>`;
-//   }).join("");
-// }
-
-// const SENSOR_BAR_MAX_M = 3.0;
-
-// // Only redraw a number once it has genuinely moved by 1.5 cm.
-// const DISPLAY_DEADBAND_M = 0.015;
-// const shownRange = [];
-
-// function displayRange(i, r) {
-//   if (r == null) { shownRange[i] = null; return "—"; }
-//   if (shownRange[i] == null || Math.abs(r - shownRange[i]) >= DISPLAY_DEADBAND_M) {
-//     shownRange[i] = r;
-//   }
-//   return `${shownRange[i].toFixed(2)} m`;
-// }
-
-// let builtLayout = null;
-
-// function updateSensorReadings() {
-//   // The bridge can switch between one and two values per box at any time.
-//   if (Tracker.layout !== builtLayout) {
-//     builtLayout = Tracker.layout;
-//     buildSensorRows();
-//     buildLayoutPanel();
-//     const layHint = $("#layHint");
-//     if (layHint) layHint.textContent = LAYOUTS[Tracker.layout].hint;
-//   }
-//   const ages = Tracker.ages();
-//   document.querySelectorAll("#sensorList .sensrow").forEach(row => {
-//     const i = +row.dataset.i;
-//     const r = Tracker.displayRanges[i];   // averaged over SOLVER.averageMs: steadier numbers
-//     const has = r != null;
-//     const dot = row.querySelector(".sdot");
-//     const bar = row.querySelector(".sbar i");
-//     const val = row.querySelector(".sval");
-//     if (dot) dot.classList.toggle("ok", has);
-//     if (bar) bar.style.width = has ? `${Math.min(100, (r / SENSOR_BAR_MAX_M) * 100.0).toFixed(0)}%` : "0%";
-//     if (val) {
-//       // Values are held until a sensor sends again; say so once it's been a while.
-//       const held = Tracker.src !== "mouse" && ages[i] != null && ages[i] >= 1000;
-//       const bg = Tracker.background[i];
-//       val.textContent = displayRange(i, r) + (bg ? " · edge" : held ? ` · ${(ages[i] / 1000).toFixed(1)}s` : "");
-//       val.title = bg ? `sensor reports out of range (${Math.round((Tracker.lastRawOutOfRange[i] || 0) * 100)} cm): keeping its last real reading`
-//                      : ages[i] == null ? "" : `last reading ${ages[i]} ms ago`;
-//     }
-//   });
-
-//   document.querySelectorAll("#boxLayout .boxrow").forEach(row => {
-//     const i = +row.dataset.i;
-//     const r = Tracker.displayRanges[i];
-//     const val = row.querySelector(".bval");
-//     if (val) {
-//       val.textContent = displayRange(i, r);
-//       val.classList.toggle("off", r == null);
-//     }
-//   });
-
-//   document.querySelectorAll("#boxLayout .boxcard").forEach(card => {
-//     const box = boxesFor(Tracker.layout).find(b => b.id === +card.dataset.box);
-//     const alive = box ? box.idx.some(i => Tracker.ranges[i] != null) : false;
-//     const dot = card.querySelector(".bdot");
-//     if (dot) dot.classList.toggle("ok", alive);
-//     card.classList.toggle("live", alive);
-//   });
-// }
-
-// function updateHUD() {
-//   if (Tracker.src === "live") Setup.tick();
-//   updateSensorReadings();
-
-//   const uiScore = $("#uiScore");
-//   const uiLevel = $("#uiLevel");
-//   const uiStreak = $("#uiStreak");
-//   const uiMiss = $("#uiMiss");
-//   const uiTime = $("#uiTime");
-//   const timefill = $("#timefill");
-
-//   if (uiScore) uiScore.textContent = G.score;
-//   if (uiLevel) uiLevel.textContent = LEVELS[G.li].n;
-//   if (uiStreak) uiStreak.textContent = "×" + G.streak;
-//   if (uiMiss) uiMiss.textContent = G.missed;
-//   if (uiTime) uiTime.textContent = G.t.toFixed(1);
-
-//   if (timefill) {
-//     timefill.style.width = (100.0 * G.t) / LEVELS[G.li].dur + "%";
-//     timefill.style.background = G.t < 8.0 ? "var(--alarm)" : "var(--signal)";
-//   }
-
-//   const p = Tracker.pos;
-//   const roPos = $("#roPos");
-//   const roDepth = $("#roDepth");
-//   const roN = $("#roN");
-
-//   if (roPos) roPos.textContent = p ? `${p.x.toFixed(2)}, ${p.y.toFixed(2)} m` : "—";
-//   if (roDepth) roDepth.textContent = p ? `${p.y.toFixed(2)} m` : "—";
-//   if (roN) roN.textContent = `${Tracker.nSensors} / ${Tracker.sensors.length}`;
-
-//   const dot = $("#stDot");
-//   const txt = $("#stText");
-//   if (dot && txt) {
-//     if (G.alarm) {
-//       dot.className = "dot bad";
-//       txt.textContent = "DEAD ZONE — alarm active";
-//     } else if (Tracker.stale) {
-//       dot.className = "dot bad";
-//       txt.textContent = "No fix — no sensor is returning an echo";
-//     } else if (Tracker.veto && !(Tracker.fix && Tracker.fix.vetoSoft)) {
-//       dot.className = "dot bad";
-//       txt.textContent = "Fix rejected — " + Tracker.reason;
-//     } else if (Tracker.mode === "one-box" && Tracker.pos) {
-//       dot.className = "dot";
-//       txt.textContent = "Degraded — one box only, cursor is coarse";
-//     } else if (Tracker.pos) {
-//       dot.className = "dot ok";
-//       txt.textContent = "Tracking";
-//     } else {
-//       dot.className = "dot";
-//       txt.textContent = "Waiting for a body in the play area";
-//     }
-//   }
-
-//   // ── Live Individual 4-Sensor Readouts (Prototype Window) ──
-//   const maxRangeM = 2.50;
-//   for (let i = 0; i < 4; i++) {
-//     const r = Tracker.ranges[i];
-//     const sv = $(`#sv${i}`);
-//     const ss = $(`#ss${i}`);
-//     const sb = $(`#sb${i}`);
-//     const sc = $(`#sc${i}`);
-//     const ssc = $(`#ssc${i}`);
-//     const ssv = $(`#ssv${i}`);
-
-//     if (r != null && !isNaN(r)) {
-//       const cm = (r * 100.0).toFixed(1);
-//       const mm = (r * 1000.0).toFixed(0);
-//       const pct = Math.min(100, Math.max(4, (r / maxRangeM) * 100.0));
-
-//       if (sv) sv.textContent = `${cm} cm`;
-//       if (ss) ss.textContent = `${mm} mm`;
-//       if (sb) sb.style.width = `${pct}%`;
-//       if (sc) {
-//         sc.classList.add("active");
-//         if (i >= 2) sc.classList.add("box1");
-//       }
-//       if (ssv) ssv.textContent = `${cm} cm`;
-//       if (ssc) ssc.classList.add("active");
-//     } else {
-//       if (sv) sv.textContent = "—";
-//       if (ss) ss.textContent = "No echo";
-//       if (sb) sb.style.width = "0%";
-//       if (sc) sc.classList.remove("active");
-//       if (ssv) ssv.textContent = "—";
-//       if (ssc) ssc.classList.remove("active");
-//     }
-//   }
-// }
-
-// let loopErrors = 0;
-
-// function mainLoop(now) {
-//   // One uncaught error in here used to stop the animation loop for good — the
-//   // page would "fizzle out" and never draw again. Log it and keep going.
-//   try {
-//     mainLoopBody(now);
-//   } catch (e) {
-//     if (loopErrors++ < 5) console.error("mainLoop:", e);
-//     if (typeof Telemetry !== "undefined" && loopErrors <= 20) {
-//       Telemetry.event("system", "js_error", { where: "mainLoop", message: String(e && e.message || e), stack: String(e && e.stack || "").slice(0, 400) });
-//     }
-//     lastTimestamp = now;
-//   }
-//   requestAnimationFrame(mainLoop);
-// }
-
-// function mainLoopBody(now) {
-//   const dt = Math.min(0.05, (now - lastTimestamp) / 1000.0);
-//   lastTimestamp = now;
-
-//   Tracker.update(dt);
-
-//   const dz = $("#dz");
-
-//   if (G.phase === "count") {
-//     G.cd -= dt;
-//     const n = Math.ceil(G.cd);
-
-//     if (n !== G.cdShown && n > 0) {
-//       G.cdShown = n;
-//       showCountdown(n, "GET READY");
-//       Audio_.blip(n <= 3 ? 660 : 440, 0.09, "square", 0.16);
-//     }
-
-//     if (G.cd <= 0) {
-//       hideCountdown();
-//       G.phase = "play";
-//       Audio_.blip(1046, 0.22, "square", 0.2);
-//       spawn();
-//     }
-//   } else if (G.phase === "play") {
-//     const L = LEVELS[G.li];
-//     G.t -= dt;
-//     if (G.t <= 0) {
-//       G.t = 0;
-//       hideCountdown();
-//       endRun("Time");
-//     }
-
-//     // Final 5 seconds: count the round out.
-//     const endN = Math.ceil(G.t);
-//     if (G.t > 0 && G.t <= 5) {
-//       if (endN !== G.endCdShown) {
-//         G.endCdShown = endN;
-//         showCountdown(endN, "TIME");
-//         Audio_.blip(endN <= 3 ? 880 : 587, 0.08, "square", 0.14);
-//       }
-//     } else if (G.endCdShown !== -1) {
-//       G.endCdShown = -1;
-//       hideCountdown();
-//     }
-
-//     const inDead = Tracker.pos && Tracker.pos.y < AREA.yNear && !Tracker.stale;
-//     if (inDead !== G.alarm) {
-//       G.alarm = inDead;
-//       if (dz) dz.classList.toggle("on", inDead);
-//       if (inDead) Audio_.alarmOn();
-//       else Audio_.alarmOff();
-//     }
-
-//     for (const m of G.moles) {
-//       m.age += dt;
-//       if (m.state === "rise") {
-//         m.pop = Math.min(1.0, m.pop + dt * 7.0);
-//         if (m.pop >= 1.0) m.state = "up";
-//       } else if (m.state === "up") {
-//         if (m.age > m.life) m.state = "sink";
-//       } else if (m.state === "sink" || m.state === "hit") {
-//         m.pop -= dt * (m.state === "hit" ? 12.0 : 5.0);
-//         if (m.pop <= 0) {
-//           m.pop = 0;
-//           m.hole.occupied = null;
-//           m.gone = true;
-//           if (m.state === "sink" && m.kind !== "bomb") {
-//             G.missed++;
-//             G.streak = 1;
-//             Audio_.escaped();
-//           }
-//         }
-//       }
-//     }
-
-//     if (Tracker.pos && !G.alarm && !Tracker.stale) {
-//       let target = null, bestD = Infinity;
-//       const grab = 0.17;
-//       for (const m of G.moles) {
-//         if (m.dead || m.state === "sink") continue;
-//         const d = Math.hypot(Tracker.pos.x - m.hole.x, Tracker.pos.y - m.hole.y);
-//         if (d < grab && d < bestD) {
-//           bestD = d;
-//           target = m;
-//         }
-//       }
-
-//       for (const m of G.moles) {
-//         if (m !== target) m.dwell = Math.max(0, m.dwell - dt * 2.5);
-//       }
-
-//       if (target) {
-//         target.dwell += dt;
-//         if (target.dwell >= L.dwell) hit(target);
-//       }
-//     } else {
-//       for (const m of G.moles) {
-//         m.dwell = Math.max(0, m.dwell - dt * 2.5);
-//       }
-//     }
-
-//     G.moles = G.moles.filter(m => !m.gone);
-//     const liveCount = G.moles.filter(m => m.state !== "sink" && !m.dead).length;
-//     if (liveCount < L.max && Math.random() < dt * 2.2) spawn();
-//     if (liveCount === 0 && G.moles.length === 0) spawn();
-
-//     for (const f of G.fx) f.t += dt;
-//     G.fx = G.fx.filter(f => f.t < 0.6);
-//   } else if (G.alarm) {
-//     G.alarm = false;
-//     if (dz) dz.classList.remove("on");
-//     Audio_.alarmOff();
-//   }
-
-//   fitStageIfNeeded();
-//   drawStage(dt);
-//   drawRadar();
-//   updateHUD();
-// }
-
-// /* ── Level select on the start overlay ─────────────────────── */
-// let pickedLevel = 0;
-// let booting = false;
-// function buildLevelPicker() {
-//   const wrap = document.getElementById("lvPick");
-//   if (!wrap) return;
-
-//   wrap.innerHTML = LEVELS.map((L, i) => `
-//     <div class="lvcard${i === pickedLevel ? " sel" : ""}" data-lv="${i}" title="${L.desc}">
-//       <span class="n">${L.n}</span>
-//       <span class="nm">${L.name}</span>
-//       <span class="gr">${L.cols * L.rows} holes · ${L.dur}s</span>
-//     </div>`).join("");
-
-//   wrap.querySelectorAll(".lvcard").forEach(card => {
-//     card.onclick = () => {
-//       pickedLevel = +card.dataset.lv;
-//       wrap.querySelectorAll(".lvcard").forEach(c => c.classList.remove("sel"));
-//       card.classList.add("sel");
-//     };
-//   });
-// }
-
-// function initApp() {
-//   const stage = $("#stage");
-//   if (stage) {
-//     stage.addEventListener("pointermove", e => {
-//       const r = stage.getBoundingClientRect();
-//       const p = fromPx(e.clientX - r.left, e.clientY - r.top);
-//       Tracker.mouse.x = p.x;
-//       Tracker.mouse.y = p.y;
-//       Tracker.mouse.has = true;
-//     });
-
-//     stage.addEventListener("pointerleave", () => {
-//       Tracker.mouse.has = false;
-//     });
-//   }
-
-//   window.addEventListener("keydown", e => {
-//     if (e.key === "p" || e.key === "P") {
-//       const dz = $("#dz");
-//       if (G.phase === "play") {
-//         G.phase = "pause";
-//         Audio_.alarmOff();
-//         if (dz) dz.classList.remove("on");
-//         showOverlay("#ovPause");
-//       } else if (G.phase === "pause") {
-//         G.phase = "play";
-//         hideAllOverlays();
-//       }
-//     }
-//     if (e.key === "m" || e.key === "M") {
-//       Audio_.muted = !Audio_.muted;
-//       if (Audio_.muted) Audio_.alarmOff();
-//     }
-//   });
-
-//   buildLevelPicker();
-
-//   const btnStart = $("#btnStart");
-//   const btnNext = $("#btnNext");
-//   const btnAgain = $("#btnAgain");
-//   const btnResume = $("#btnResume");
-
-//   if (btnStart) btnStart.onclick = () => { Audio_.init(); hideAllOverlays(); resetRun(pickedLevel); };
-//   if (btnNext) btnNext.onclick = () => { hideAllOverlays(); startLevel(G.li + 1); };
-//   if (btnAgain) btnAgain.onclick = () => { hideAllOverlays(); resetRun(pickedLevel); };
-//   if (btnResume) btnResume.onclick = () => { hideAllOverlays(); G.phase = "play"; };
-
-//   document.querySelectorAll("[data-src]").forEach(b => {
-//     b.onclick = () => {
-//       document.querySelectorAll("[data-src]").forEach(o => o.setAttribute("aria-pressed", o === b));
-//       Tracker.src = b.dataset.src;
-//       Tracker.pos = null;
-//       const hint = $("#srcHint");
-//       const wsField = $("#wsField");
-//       if (hint) hint.textContent = SRC_HINT[Tracker.src];
-//       if (wsField) wsField.hidden = Tracker.src !== "live";
-//       // if (Tracker.src === "live") Setup.open();
-//       if (Tracker.src === "live") {
-//   if (booting) Setup.connect();   // page load: just connect, keep the level picker
-//   else Setup.open();              // user clicked LIVE: show the wizard
-// }
-//     };
-//   });
-
-//   const setupConnect = $("#setupConnect");
-//   if (setupConnect) setupConnect.onclick = () => Setup.connect();
-
-//   const btnReopenSetup = $("#btnReopenSetup");
-//   if (btnReopenSetup) btnReopenSetup.onclick = () => Setup.open();
-
-//   const btnSetupDone = $("#btnSetupDone");
-//   if (btnSetupDone) {
-//     btnSetupDone.onclick = () => { Audio_.init(); hideAllOverlays(); resetRun(pickedLevel); };
-//   }
-
-//   const btnSetupSkip = $("#btnSetupSkip");
-//   if (btnSetupSkip) {
-//     btnSetupSkip.onclick = () => {
-//       const mouseBtn = document.querySelector('[data-src="mouse"]');
-//       if (mouseBtn) mouseBtn.click();
-//       hideAllOverlays();
-//     };
-//   }
-
-//   const sDead = $("#sDead"), vDead = $("#vDead");
-//   if (sDead && vDead) {
-//     const showDead = () => {
-//       vDead.textContent = `${Math.round(AREA.dead * 100)} cm`;
-//       const stArea = $("#stArea");
-//       if (stArea) stArea.textContent = `${AREA.w.toFixed(2)} × ${AREA.deep.toFixed(2)} m play area · ${AREA.dead.toFixed(2)} m dead zone`;
-//     };
-//     sDead.value = Math.round(AREA.dead * 100);
-//     sDead.oninput = () => {
-//       setDeadZone(+sDead.value / 100);
-//       if (G.phase !== "play" && G.phase !== "count") buildHoles();
-//       showDead();
-//     };
-//     showDead();
-//   }
-
-//   const bindSlider = (id, out, fn, fmt) => {
-//     const el = $(id);
-//     const outEl = $(out);
-//     if (!el || !outEl) return;
-//     const apply = () => {
-//       fn(+el.value);
-//       outEl.textContent = fmt(+el.value);
-//     };
-//     el.oninput = apply;
-//     apply();
-//   };
-
-
-//   (function bootFromUrl() {
-//     const q = new URLSearchParams(location.search);
-
-//     const wsPort = q.get("ws");
-//     const wsUrlInput = $("#wsUrl");
-//     if (wsPort && wsUrlInput) {
-//       const url = /^wss?:/.test(wsPort) ? wsPort : `ws://${location.hostname}:${wsPort}`;
-//       wsUrlInput.value = url;
-//     }
-
-//     // if (q.get("src") === "live") {
-//     //   const b = document.querySelector('[data-src="live"]');
-//     //   if (b) b.click();
-//     // }
-//     if (q.get("src") === "live") {
-//   const b = document.querySelector('[data-src="live"]');
-//   booting = true;
-//   if (b) b.click();
-//   booting = false;
-// }
-//   })();
-
-//   const srcHint = $("#srcHint");
-//   const layHint = $("#layHint");
-//   if (srcHint) srcHint.textContent = SRC_HINT[Tracker.src];
-//   if (layHint) layHint.textContent = LAYOUTS[Tracker.layout].hint;
-
-//   buildSensorRows();
-//   buildLayoutPanel();
-//   builtLayout = Tracker.layout;
-//   buildHoles();
-//   fitStage();
-//   window.addEventListener("resize", fitStage);
-//   requestAnimationFrame(mainLoop);
-// }
-
-// window.addEventListener("DOMContentLoaded", initApp);
-
-// "use strict";
-// /* ══════════════════════════════════════════════════════════════
-//    MOLEFIELD — Application Controller & Loop
-//      BOX 1 (left)  → S0, S1
-//      BOX 2 (right) → S2, S3
-//    ══════════════════════════════════════════════════════════════ */
-
-// const $ = s => document.querySelector(s);
-// let lastTimestamp = performance.now();
-// let lastStageW = 0, lastStageH = 0;
-
-// function fitStageIfNeeded() {
-//   const stage = document.getElementById("stage");
-//   if (!stage || !stage.parentElement) return;
-//   const r = stage.parentElement.getBoundingClientRect();
-//   if (Math.abs(r.width - lastStageW) > 1 || Math.abs(r.height - lastStageH) > 1) {
-//     lastStageW = r.width;
-//     lastStageH = r.height;
-//     fitStage();
-//   }
-// }
-
-// function buildSensorRows() {
-//   const list = $("#sensorList");
-//   if (!list) return;
-//   list.innerHTML = boxesFor(Tracker.layout).map(b => {
-//     const rows = b.idx.map(i => {
-//       const sen = Tracker.sensors[i];
-//       return `
-//       <div class="sensrow" data-i="${i}">
-//         <span class="sdot"></span>
-//         <span class="slabel">${sen.n}<small>Box ${b.id} · ${sen.w}°</small></span>
-//         <span class="sbar"><i></i></span>
-//         <span class="sval">—</span>
-//       </div>`;
-//     }).join("");
-//     return `<div class="sgroup">${b.label} · ${b.side}</div>${rows}`;
-//   }).join("");
-// }
-
-// function buildLayoutPanel() {
-//   const wrap = $("#boxLayout");
-//   if (!wrap) return;
-//   wrap.innerHTML = boxesFor(Tracker.layout).map(b => {
-//     const rows = b.idx.map(i => {
-//       const sen = Tracker.sensors[i];
-//       return `
-//         <div class="boxrow" data-i="${i}">
-//           <span class="bslot">${sen.n}</span>
-//           <span class="bval">—</span>
-//         </div>`;
-//     }).join("");
-//     return `
-//       <div class="boxcard" data-box="${b.id}">
-//         <div class="boxhead">
-//           <span class="bdot"></span>
-//           <span class="bname">${b.label}</span>
-//           <span class="bside">${b.side}</span>
-//         </div>
-//         ${rows}
-//       </div>`;
-//   }).join("");
-// }
-
-// const SENSOR_BAR_MAX_M = 3.0;
-
-// // Only redraw a number once it has genuinely moved by 1.5 cm.
-// const DISPLAY_DEADBAND_M = 0.015;
-// const shownRange = [];
-
-// function displayRange(i, r) {
-//   if (r == null) { shownRange[i] = null; return "—"; }
-//   if (shownRange[i] == null || Math.abs(r - shownRange[i]) >= DISPLAY_DEADBAND_M) {
-//     shownRange[i] = r;
-//   }
-//   return `${shownRange[i].toFixed(2)} m`;
-// }
-
-// let builtLayout = null;
-
-// function updateSensorReadings() {
-//   // The bridge can switch between one and two values per box at any time.
-//   if (Tracker.layout !== builtLayout) {
-//     builtLayout = Tracker.layout;
-//     buildSensorRows();
-//     buildLayoutPanel();
-//     const layHint = $("#layHint");
-//     if (layHint) layHint.textContent = LAYOUTS[Tracker.layout].hint;
-//   }
-//   const ages = Tracker.ages();
-//   document.querySelectorAll("#sensorList .sensrow").forEach(row => {
-//     const i = +row.dataset.i;
-//     const r = Tracker.displayRanges[i];   // averaged over SOLVER.averageMs: steadier numbers
-//     const has = r != null;
-//     const dot = row.querySelector(".sdot");
-//     const bar = row.querySelector(".sbar i");
-//     const val = row.querySelector(".sval");
-//     if (dot) dot.classList.toggle("ok", has);
-//     if (bar) bar.style.width = has ? `${Math.min(100, (r / SENSOR_BAR_MAX_M) * 100.0).toFixed(0)}%` : "0%";
-//     if (val) {
-//       // Values are held until a sensor sends again; say so once it's been a while.
-//       const held = Tracker.src !== "mouse" && ages[i] != null && ages[i] >= 1000;
-//       const bg = Tracker.background[i];
-//       val.textContent = displayRange(i, r) + (bg ? " · edge" : held ? ` · ${(ages[i] / 1000).toFixed(1)}s` : "");
-//       val.title = bg ? `sensor reports out of range (${Math.round((Tracker.lastRawOutOfRange[i] || 0) * 100)} cm): keeping its last real reading`
-//                      : ages[i] == null ? "" : `last reading ${ages[i]} ms ago`;
-//     }
-//   });
-
-//   document.querySelectorAll("#boxLayout .boxrow").forEach(row => {
-//     const i = +row.dataset.i;
-//     const r = Tracker.displayRanges[i];
-//     const val = row.querySelector(".bval");
-//     if (val) {
-//       val.textContent = displayRange(i, r);
-//       val.classList.toggle("off", r == null);
-//     }
-//   });
-
-//   document.querySelectorAll("#boxLayout .boxcard").forEach(card => {
-//     const box = boxesFor(Tracker.layout).find(b => b.id === +card.dataset.box);
-//     const alive = box ? box.idx.some(i => Tracker.ranges[i] != null) : false;
-//     const dot = card.querySelector(".bdot");
-//     if (dot) dot.classList.toggle("ok", alive);
-//     card.classList.toggle("live", alive);
-//   });
-// }
-
-// function updateHUD() {
-//   if (Tracker.src === "live") Setup.tick();
-//   updateSensorReadings();
-
-//   const uiScore = $("#uiScore");
-//   const uiLevel = $("#uiLevel");
-//   const uiStreak = $("#uiStreak");
-//   const uiMiss = $("#uiMiss");
-//   const uiTime = $("#uiTime");
-//   const timefill = $("#timefill");
-
-//   if (uiScore) uiScore.textContent = G.score;
-//   if (uiLevel) uiLevel.textContent = LEVELS[G.li].n;
-//   if (uiStreak) uiStreak.textContent = "×" + G.streak;
-//   if (uiMiss) uiMiss.textContent = G.missed;
-//   if (uiTime) uiTime.textContent = G.t.toFixed(1);
-
-//   if (timefill) {
-//     timefill.style.width = (100.0 * G.t) / LEVELS[G.li].dur + "%";
-//     timefill.style.background = G.t < 8.0 ? "var(--alarm)" : "var(--signal)";
-//   }
-
-//   const p = Tracker.pos;
-//   const roPos = $("#roPos");
-//   const roDepth = $("#roDepth");
-//   const roN = $("#roN");
-
-//   if (roPos) roPos.textContent = p ? `${p.x.toFixed(2)}, ${p.y.toFixed(2)} m` : "—";
-//   if (roDepth) roDepth.textContent = p ? `${p.y.toFixed(2)} m` : "—";
-//   if (roN) roN.textContent = `${Tracker.nSensors} / ${Tracker.sensors.length}`;
-
-//   const dot = $("#stDot");
-//   const txt = $("#stText");
-//   if (dot && txt) {
-//     if (G.alarm) {
-//       dot.className = "dot bad";
-//       txt.textContent = "DEAD ZONE — alarm active";
-//     } else if (Tracker.stale) {
-//       dot.className = "dot bad";
-//       txt.textContent = "No fix — no sensor is returning an echo";
-//     } else if (Tracker.veto && !(Tracker.fix && Tracker.fix.vetoSoft)) {
-//       dot.className = "dot bad";
-//       txt.textContent = "Fix rejected — " + Tracker.reason;
-//     } else if (Tracker.mode === "one-box" && Tracker.pos) {
-//       dot.className = "dot";
-//       txt.textContent = "Degraded — one box only, cursor is coarse";
-//     } else if (Tracker.pos) {
-//       dot.className = "dot ok";
-//       txt.textContent = "Tracking";
-//     } else {
-//       dot.className = "dot";
-//       txt.textContent = "Waiting for a body in the play area";
-//     }
-//   }
-
-//   // ── Live Individual 4-Sensor Readouts (Prototype Window) ──
-//   const maxRangeM = 2.50;
-//   for (let i = 0; i < 4; i++) {
-//     const r = Tracker.ranges[i];
-//     const sv = $(`#sv${i}`);
-//     const ss = $(`#ss${i}`);
-//     const sb = $(`#sb${i}`);
-//     const sc = $(`#sc${i}`);
-//     const ssc = $(`#ssc${i}`);
-//     const ssv = $(`#ssv${i}`);
-
-//     if (r != null && !isNaN(r)) {
-//       const cm = (r * 100.0).toFixed(1);
-//       const mm = (r * 1000.0).toFixed(0);
-//       const pct = Math.min(100, Math.max(4, (r / maxRangeM) * 100.0));
-
-//       if (sv) sv.textContent = `${cm} cm`;
-//       if (ss) ss.textContent = `${mm} mm`;
-//       if (sb) sb.style.width = `${pct}%`;
-//       if (sc) {
-//         sc.classList.add("active");
-//         if (i >= 2) sc.classList.add("box1");
-//       }
-//       if (ssv) ssv.textContent = `${cm} cm`;
-//       if (ssc) ssc.classList.add("active");
-//     } else {
-//       if (sv) sv.textContent = "—";
-//       if (ss) ss.textContent = "No echo";
-//       if (sb) sb.style.width = "0%";
-//       if (sc) sc.classList.remove("active");
-//       if (ssv) ssv.textContent = "—";
-//       if (ssc) ssc.classList.remove("active");
-//     }
-//   }
-// }
-
-// let loopErrors = 0;
-
-// function mainLoop(now) {
-//   // One uncaught error in here used to stop the animation loop for good — the
-//   // page would "fizzle out" and never draw again. Log it and keep going.
-//   try {
-//     mainLoopBody(now);
-//   } catch (e) {
-//     if (loopErrors++ < 5) console.error("mainLoop:", e);
-//     if (typeof Telemetry !== "undefined" && loopErrors <= 20) {
-//       Telemetry.event("system", "js_error", { where: "mainLoop", message: String(e && e.message || e), stack: String(e && e.stack || "").slice(0, 400) });
-//     }
-//     lastTimestamp = now;
-//   }
-//   requestAnimationFrame(mainLoop);
-// }
-
-// function mainLoopBody(now) {
-//   const dt = Math.min(0.05, (now - lastTimestamp) / 1000.0);
-//   lastTimestamp = now;
-
-//   Tracker.update(dt);
-
-//   const dz = $("#dz");
-
-//   if (G.phase === "count") {
-//     G.cd -= dt;
-//     const n = Math.ceil(G.cd);
-
-//     if (n !== G.cdShown && n > 0) {
-//       G.cdShown = n;
-//       showCountdown(n, "GET READY");
-//       Audio_.blip(n <= 3 ? 660 : 440, 0.09, "square", 0.16);
-//     }
-
-//     if (G.cd <= 0) {
-//       hideCountdown();
-//       G.phase = "play";
-//       Audio_.blip(1046, 0.22, "square", 0.2);
-//       spawn();
-//     }
-//   } else if (G.phase === "play") {
-//     const L = LEVELS[G.li];
-//     G.t -= dt;
-//     if (G.t <= 0) {
-//       G.t = 0;
-//       hideCountdown();
-//       endRun("Time");
-//     }
-
-//     // Final 5 seconds: count the round out.
-//     const endN = Math.ceil(G.t);
-//     if (G.t > 0 && G.t <= 5) {
-//       if (endN !== G.endCdShown) {
-//         G.endCdShown = endN;
-//         showCountdown(endN, "TIME");
-//         Audio_.blip(endN <= 3 ? 880 : 587, 0.08, "square", 0.14);
-//       }
-//     } else if (G.endCdShown !== -1) {
-//       G.endCdShown = -1;
-//       hideCountdown();
-//     }
-
-//     const inDead = Tracker.pos && Tracker.pos.y < AREA.yNear && !Tracker.stale;
-//     if (inDead !== G.alarm) {
-//       G.alarm = inDead;
-//       if (dz) dz.classList.toggle("on", inDead);
-//       if (inDead) Audio_.alarmOn();
-//       else Audio_.alarmOff();
-//     }
-
-//     for (const m of G.moles) {
-//       m.age += dt;
-//       if (m.state === "rise") {
-//         m.pop = Math.min(1.0, m.pop + dt * 7.0);
-//         if (m.pop >= 1.0) m.state = "up";
-//       } else if (m.state === "up") {
-//         if (m.age > m.life) m.state = "sink";
-//       } else if (m.state === "sink" || m.state === "hit") {
-//         m.pop -= dt * (m.state === "hit" ? 12.0 : 5.0);
-//         if (m.pop <= 0) {
-//           m.pop = 0;
-//           m.hole.occupied = null;
-//           m.gone = true;
-//           if (m.state === "sink" && m.kind !== "bomb") {
-//             G.missed++;
-//             G.streak = 1;
-//             Audio_.escaped();
-//           }
-//         }
-//       }
-//     }
-
-//     if (Tracker.pos && !G.alarm && !Tracker.stale) {
-//       let target = null, bestD = Infinity;
-//       const grab = 0.17;
-//       for (const m of G.moles) {
-//         if (m.dead || m.state === "sink") continue;
-//         const d = Math.hypot(Tracker.pos.x - m.hole.x, Tracker.pos.y - m.hole.y);
-//         if (d < grab && d < bestD) {
-//           bestD = d;
-//           target = m;
-//         }
-//       }
-
-//       for (const m of G.moles) {
-//         if (m !== target) m.dwell = Math.max(0, m.dwell - dt * 2.5);
-//       }
-
-//       if (target) {
-//         target.dwell += dt;
-//         if (target.dwell >= L.dwell) hit(target);
-//       }
-//     } else {
-//       for (const m of G.moles) {
-//         m.dwell = Math.max(0, m.dwell - dt * 2.5);
-//       }
-//     }
-
-//     G.moles = G.moles.filter(m => !m.gone);
-//     const liveCount = G.moles.filter(m => m.state !== "sink" && !m.dead).length;
-//     if (liveCount < L.max && Math.random() < dt * 2.2) spawn();
-//     if (liveCount === 0 && G.moles.length === 0) spawn();
-
-//     for (const f of G.fx) f.t += dt;
-//     G.fx = G.fx.filter(f => f.t < 0.6);
-//   } else if (G.alarm) {
-//     G.alarm = false;
-//     if (dz) dz.classList.remove("on");
-//     Audio_.alarmOff();
-//   }
-
-//   fitStageIfNeeded();
-//   drawStage(dt);
-//   drawRadar();
-//   updateHUD();
-//   updatePauseButton();
-// }
-
-// /* ── Pause / resume ────────────────────────────────────────────
-//    Used by the P key, the on-screen PAUSE button and the Resume button.
-//    Works during the GET READY countdown as well as during play. */
-// function pauseGame() {
-//   if (G.phase !== "play" && G.phase !== "count") return;
-//   G.resumeTo = G.phase;
-//   G.phase = "pause";
-//   Audio_.alarmOff();
-//   const dz = document.getElementById("dz");
-//   if (dz) dz.classList.remove("on");
-//   showOverlay("#ovPause");
-// }
-
-// function resumeGame() {
-//   if (G.phase !== "pause") return;
-//   G.phase = G.resumeTo || "play";
-//   hideAllOverlays();
-// }
-
-// function togglePause() {
-//   if (G.phase === "pause") resumeGame();
-//   else pauseGame();
-// }
-
-// /* On-screen PAUSE button, built here so no HTML change is needed. It sits in
-//    the bottom-left corner of the stage and only shows while a round runs. */
-// function buildPauseButton() {
-//   const stage = document.getElementById("stage");
-//   if (!stage || !stage.parentElement || document.getElementById("btnPauseGame")) return;
-//   const host = stage.parentElement;
-//   try { if (getComputedStyle(host).position === "static") host.style.position = "relative"; } catch (e) {}
-
-//   const b = document.createElement("button");
-//   b.id = "btnPauseGame";
-//   b.type = "button";
-//   b.textContent = "❚❚ PAUSE";
-//   b.title = "Pause the game (P)";
-//   b.style.cssText =
-//     "position:absolute;left:14px;bottom:14px;z-index:20;padding:10px 16px;" +
-//     "border-radius:10px;border:1px solid rgba(255,255,255,.28);background:rgba(16,22,29,.9);" +
-//     "color:#fff;font:700 14px 'Bahnschrift','DIN Alternate',sans-serif;letter-spacing:.06em;" +
-//     "cursor:pointer;display:none;";
-//   b.onclick = () => { pauseGame(); b.blur(); };
-//   host.appendChild(b);
-// }
-
-// function updatePauseButton() {
-//   const b = document.getElementById("btnPauseGame");
-//   if (!b) return;
-//   const show = G.phase === "play" || G.phase === "count";
-//   const want = show ? "block" : "none";
-//   if (b.style.display !== want) b.style.display = want;
-// }
-
-// /* ── Level select on the start overlay ─────────────────────── */
-// let pickedLevel = 0;
-// let booting = false;
-// function buildLevelPicker() {
-//   const wrap = document.getElementById("lvPick");
-//   if (!wrap) return;
-
-//   wrap.innerHTML = LEVELS.map((L, i) => `
-//     <div class="lvcard${i === pickedLevel ? " sel" : ""}" data-lv="${i}" title="${L.desc}">
-//       <span class="n">${L.n}</span>
-//       <span class="nm">${L.name}</span>
-//       <span class="gr">${L.cols * L.rows} holes · ${L.dur}s</span>
-//     </div>`).join("");
-
-//   wrap.querySelectorAll(".lvcard").forEach(card => {
-//     card.onclick = () => {
-//       pickedLevel = +card.dataset.lv;
-//       wrap.querySelectorAll(".lvcard").forEach(c => c.classList.remove("sel"));
-//       card.classList.add("sel");
-//     };
-//   });
-// }
-
-// function initApp() {
-//   const stage = $("#stage");
-//   if (stage) {
-//     stage.addEventListener("pointermove", e => {
-//       const r = stage.getBoundingClientRect();
-//       const p = fromPx(e.clientX - r.left, e.clientY - r.top);
-//       Tracker.mouse.x = p.x;
-//       Tracker.mouse.y = p.y;
-//       Tracker.mouse.has = true;
-//     });
-
-//     stage.addEventListener("pointerleave", () => {
-//       Tracker.mouse.has = false;
-//     });
-//   }
-
-//   window.addEventListener("keydown", e => {
-//     if (e.key === "p" || e.key === "P") togglePause();
-//     if (e.key === "m" || e.key === "M") {
-//       Audio_.muted = !Audio_.muted;
-//       if (Audio_.muted) Audio_.alarmOff();
-//     }
-//   });
-
-//   buildLevelPicker();
-//   buildPauseButton();
-
-//   const btnStart = $("#btnStart");
-//   const btnNext = $("#btnNext");
-//   const btnAgain = $("#btnAgain");
-//   const btnResume = $("#btnResume");
-
-//   if (btnStart) btnStart.onclick = () => { Audio_.init(); hideAllOverlays(); resetRun(pickedLevel); };
-//   if (btnNext) btnNext.onclick = () => { hideAllOverlays(); startLevel(G.li + 1); };
-//   if (btnAgain) btnAgain.onclick = () => { hideAllOverlays(); resetRun(pickedLevel); };
-//   if (btnResume) btnResume.onclick = () => resumeGame();
-
-//   document.querySelectorAll("[data-src]").forEach(b => {
-//     b.onclick = () => {
-//       document.querySelectorAll("[data-src]").forEach(o => o.setAttribute("aria-pressed", o === b));
-//       Tracker.src = b.dataset.src;
-//       Tracker.pos = null;
-//       const hint = $("#srcHint");
-//       const wsField = $("#wsField");
-//       if (hint) hint.textContent = SRC_HINT[Tracker.src];
-//       if (wsField) wsField.hidden = Tracker.src !== "live";
-//       // if (Tracker.src === "live") Setup.open();
-//       if (Tracker.src === "live") {
-//   if (booting) Setup.connect();   // page load: just connect, keep the level picker
-//   else Setup.open();              // user clicked LIVE: show the wizard
-// }
-//     };
-//   });
-
-//   const setupConnect = $("#setupConnect");
-//   if (setupConnect) setupConnect.onclick = () => Setup.connect();
-
-//   const btnReopenSetup = $("#btnReopenSetup");
-//   if (btnReopenSetup) btnReopenSetup.onclick = () => Setup.open();
-
-//   const btnSetupDone = $("#btnSetupDone");
-//   if (btnSetupDone) {
-//     btnSetupDone.onclick = () => { Audio_.init(); hideAllOverlays(); resetRun(pickedLevel); };
-//   }
-
-//   const btnSetupSkip = $("#btnSetupSkip");
-//   if (btnSetupSkip) {
-//     btnSetupSkip.onclick = () => {
-//       const mouseBtn = document.querySelector('[data-src="mouse"]');
-//       if (mouseBtn) mouseBtn.click();
-//       showOverlay("#ovStart");   // back to the level picker; hideAllOverlays() left an empty field
-//     };
-//   }
-
-//   const sDead = $("#sDead"), vDead = $("#vDead");
-//   if (sDead && vDead) {
-//     const showDead = () => {
-//       vDead.textContent = `${Math.round(AREA.dead * 100)} cm`;
-//       const stArea = $("#stArea");
-//       if (stArea) stArea.textContent = `${AREA.w.toFixed(2)} × ${AREA.deep.toFixed(2)} m play area · ${AREA.dead.toFixed(2)} m dead zone`;
-//     };
-//     sDead.value = Math.round(AREA.dead * 100);
-//     sDead.oninput = () => {
-//       setDeadZone(+sDead.value / 100);
-//       if (G.phase !== "play" && G.phase !== "count") buildHoles();
-//       showDead();
-//     };
-//     showDead();
-//   }
-
-//   const bindSlider = (id, out, fn, fmt) => {
-//     const el = $(id);
-//     const outEl = $(out);
-//     if (!el || !outEl) return;
-//     const apply = () => {
-//       fn(+el.value);
-//       outEl.textContent = fmt(+el.value);
-//     };
-//     el.oninput = apply;
-//     apply();
-//   };
-
-
-//   (function bootFromUrl() {
-//     const q = new URLSearchParams(location.search);
-
-//     const wsPort = q.get("ws");
-//     const wsUrlInput = $("#wsUrl");
-//     if (wsPort && wsUrlInput) {
-//       const url = /^wss?:/.test(wsPort) ? wsPort : `ws://${location.hostname}:${wsPort}`;
-//       wsUrlInput.value = url;
-//     }
-
-//     // if (q.get("src") === "live") {
-//     //   const b = document.querySelector('[data-src="live"]');
-//     //   if (b) b.click();
-//     // }
-//     if (q.get("src") === "live") {
-//   const b = document.querySelector('[data-src="live"]');
-//   booting = true;
-//   if (b) b.click();
-//   booting = false;
-// }
-//   })();
-
-//   const srcHint = $("#srcHint");
-//   const layHint = $("#layHint");
-//   if (srcHint) srcHint.textContent = SRC_HINT[Tracker.src];
-//   if (layHint) layHint.textContent = LAYOUTS[Tracker.layout].hint;
-
-//   buildSensorRows();
-//   buildLayoutPanel();
-//   builtLayout = Tracker.layout;
-//   buildHoles();
-//   fitStage();
-//   window.addEventListener("resize", fitStage);
-//   requestAnimationFrame(mainLoop);
-// }
-
-// window.addEventListener("DOMContentLoaded", initApp);
-
 "use strict";
 /* ══════════════════════════════════════════════════════════════
    MOLEFIELD — Application Controller & Loop
@@ -1463,6 +356,7 @@ function mainLoopBody(now) {
   drawRadar();
   updateHUD();
   updatePauseButton();
+  updateSidebarButton();
 }
 
 /* ── Pause / resume ────────────────────────────────────────────
@@ -1519,6 +413,127 @@ function updatePauseButton() {
   if (b.style.display !== want) b.style.display = want;
 }
 
+/* ── Hide / show the right-hand control panel ──────────────────
+   Finds the sidebar by itself (the part of the page that holds the radar,
+   next to the stage), so no HTML change is needed. Hiding it only blanks the
+   panel; its column stays reserved, so the game screen never resizes. Button bottom-right of the stage, or press H. The choice is
+   remembered in this browser. */
+const SIDEBAR_KEY = "molefield.sidebarHidden";
+const Side = { el: null, host: null, btn: null, hidden: false, gridWas: null, onRight: true };
+
+function findSidebar() {
+  const radar = document.getElementById("radar");
+  const stage = document.getElementById("stage");
+  if (radar && stage) {
+    let el = radar;
+    while (el.parentElement && !el.parentElement.contains(stage)) el = el.parentElement;
+    if (el.parentElement && el !== document.body && !el.contains(stage)) return el;
+  }
+  return document.querySelector("aside, #sidebar, .sidebar, .side");
+}
+
+function setSidebarHidden(hide) {
+  const el = Side.el;
+  if (!el) return;
+  Side.hidden = !!hide;
+  // Hide the panel's contents but keep its column, so the game screen keeps
+  // exactly the same size and position (no grid change, no stage refit).
+  el.style.visibility = hide ? "hidden" : "";
+  el.style.pointerEvents = hide ? "none" : "";
+  if (Side.btn) {
+    Side.btn.textContent = hide ? "\u25C0 SHOW PANEL" : "HIDE PANEL \u25B6";
+    Side.btn.title = (hide ? "Show" : "Hide") + " the control panel (H)";
+  }
+  try { localStorage.setItem(SIDEBAR_KEY, hide ? "1" : "0"); } catch (e) {}
+}
+
+/* Refit the canvas and repaint it straight away, in the same task as the layout
+   change, so the browser never paints a blank or stretched frame in between. */
+function refitStageNow() {
+  try {
+    const stage = document.getElementById("stage");
+    if (!stage || !stage.parentElement) return;
+    const r = stage.parentElement.getBoundingClientRect();   // forces the new layout
+    lastStageW = r.width;
+    lastStageH = r.height;
+    fitStage();
+    drawStage(0);
+  } catch (e) {}
+}
+
+/* Keep the button in the bottom corner of the play area: just beside the panel
+   while it is open, at the window edge while it is hidden. */
+function updateSidebarButton() {
+  const b = Side.btn, el = Side.el;
+  if (!b || !el) return;
+  if (!Side.hidden) {
+    const r = el.getBoundingClientRect();
+    if (r.width > 0) Side.onRight = (r.left + r.right) / 2 > window.innerWidth / 2;
+    const x = Math.round(Side.onRight ? window.innerWidth - r.left + 14 : r.right + 14);
+    if (Side.lastX !== x || Side.lastSide !== Side.onRight) {
+      Side.lastX = x; Side.lastSide = Side.onRight;
+      b.style.right = Side.onRight ? x + "px" : "auto";
+      b.style.left = Side.onRight ? "auto" : x + "px";
+    }
+  } else if (Side.lastX !== 14 || Side.lastSide !== Side.onRight) {
+    Side.lastX = 14; Side.lastSide = Side.onRight;
+    b.style.right = Side.onRight ? "14px" : "auto";
+    b.style.left = Side.onRight ? "auto" : "14px";
+  }
+}
+
+/* Some layouts keep the sidebar out of the flow (fixed / absolute) and reserve its
+   width as a margin or padding on the stage's container. Zero any that match the
+   sidebar's width while it is hidden, and put them back when it returns. */
+function freeReservedSpace(hide) {
+  try {
+    if (hide) {
+      if (Side.saved && Side.saved.length) return;
+      Side.saved = [];
+      const W = Side.width || 0;
+      if (W <= 50) return;
+      const stage = document.getElementById("stage");
+      const top = Side.el.parentElement;
+      for (let n = stage; n; n = n.parentElement) {
+        const cs = getComputedStyle(n);
+        for (const k of ["marginRight", "marginLeft", "paddingRight", "paddingLeft"]) {
+          if (Math.abs(parseFloat(cs[k]) - W) <= 3) { Side.saved.push([n, k, n.style[k]]); n.style[k] = "0px"; }
+        }
+        if (n === top || n === document.body) break;
+      }
+    } else {
+      for (const [n, k, v] of Side.saved || []) n.style[k] = v;
+      Side.saved = [];
+    }
+  } catch (e) {}
+}
+
+function toggleSidebar() { setSidebarHidden(!Side.hidden); }
+
+function buildSidebarToggle() {
+  const stage = document.getElementById("stage");
+  if (!stage || !stage.parentElement || document.getElementById("btnSidebar")) return;
+  Side.el = findSidebar();
+  if (!Side.el) return;
+  const host = stage.parentElement;
+
+  const b = document.createElement("button");
+  b.id = "btnSidebar";
+  b.type = "button";
+  b.style.cssText =
+    "position:fixed;right:14px;bottom:24px;z-index:9000;padding:10px 16px;" +
+    "border-radius:10px;border:1px solid rgba(255,255,255,.28);background:rgba(16,22,29,.92);" +
+    "color:#fff;font:700 14px 'Bahnschrift','DIN Alternate',sans-serif;letter-spacing:.06em;cursor:pointer;";
+  b.onclick = () => { toggleSidebar(); b.blur(); };
+  document.body.appendChild(b);   // fixed to the window, so it can never be clipped or pushed off screen
+  Side.host = host;
+  Side.btn = b;
+
+  let saved = false;
+  try { saved = localStorage.getItem(SIDEBAR_KEY) === "1"; } catch (e) {}
+  setSidebarHidden(saved);
+}
+
 /* ── Level select on the start overlay ─────────────────────── */
 let pickedLevel = 0;
 let booting = false;
@@ -1560,6 +575,7 @@ function initApp() {
 
   window.addEventListener("keydown", e => {
     if (e.key === "p" || e.key === "P") togglePause();
+    if ((e.key === "h" || e.key === "H") && !/^(INPUT|TEXTAREA|SELECT)$/.test((e.target && e.target.tagName) || "")) toggleSidebar();
     if (e.key === "m" || e.key === "M") {
       Audio_.muted = !Audio_.muted;
       if (Audio_.muted) Audio_.alarmOff();
@@ -1568,6 +584,7 @@ function initApp() {
 
   buildLevelPicker();
   buildPauseButton();
+  buildSidebarToggle();
 
   const btnStart = $("#btnStart");
   const btnNext = $("#btnNext");
