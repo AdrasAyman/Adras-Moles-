@@ -445,7 +445,7 @@ const LEVELS = [
     dwell: 0.4,//0.50
     max: 1,
     target: 6,//6
-    dur: 400,
+    dur: 50,
     bombs: false,
     gold: false,
     freezeMoles: true,   // true: ice moles can appear on this level
